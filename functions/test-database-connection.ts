@@ -2,8 +2,9 @@ Deno.serve(async (req) => {
   try {
     const { connectionData } = await req.json();
     
-    // Import PostgreSQL client
-    const { Client } = await import("npm:pg@8.11.3");
+    // Import PostgreSQL client with proper destructuring
+    const pg = await import("npm:pg@8.11.3");
+    const { Client } = pg.default || pg;
     
     // Create connection
     const client = new Client({
