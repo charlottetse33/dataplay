@@ -1,0 +1,42 @@
+{
+  "name": "DatabaseConnection",
+  "description": "Stores PostgreSQL database connection information",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Friendly name for the connection"
+    },
+    "host": {
+      "type": "string",
+      "description": "Database host address"
+    },
+    "port": {
+      "type": "number",
+      "description": "Database port number"
+    },
+    "database": {
+      "type": "string",
+      "description": "Database name"
+    },
+    "username": {
+      "type": "string",
+      "description": "Database username"
+    },
+    "password": {
+      "type": "string",
+      "description": "Encrypted database password"
+    },
+    "ssl_mode": {
+      "type": "string",
+      "description": "SSL connection mode"
+    },
+    "is_active": {
+      "type": "boolean",
+      "description": "Whether this connection is currently active"
+    },
+    "last_connected": {
+      "type": "string",
+      "description": "Last successful connection timestamp"
+    }
+  }
+}

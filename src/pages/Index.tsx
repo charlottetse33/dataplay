@@ -1,11 +1,217 @@
-// Update this page (the content is just a fallback if you fail to update the page)
+import React, { useState, useEffect } from 'react';
+import { DatabaseConnectionForm } from '@/components/DatabaseConnectionForm';
+import { DiagramRenderer } from '@/components/DiagramRenderer';
+import { TransformationAgent } from '@/components/TransformationAgent';
+import { SchemaViewer } from '@/components/SchemaViewer';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Database, Zap, GitBranch, Settings, Loader2 } from 'lucide-react';
+import { useDatabase } from '@/hooks/useDatabase';
+import { DatabaseConnection, SchemaSnapshot } from '@/entities';
 
 const Index = () => {
+  const [currentView, setCurrentView] = useState<'connect' | 'dashboard'>('connect');
+  const [latestSnapshot, setLatestSnapshot] = useState<any>(null);
+  
+  const { 
+    currentConnection, 
+    schema, 
+    isIntrospecting, 
+    introspectSchema, 
+    setCurrentConnection 
+  } = useDatabase();
+
+  useEffect(() => {
+    // Check for existing connections on load
+    const loadExistingConnection = async () => {
+      try {
+        const connections = await DatabaseConnection.list('-last_connected', 1);
+        if (connections.length > 0) {
+          const connection = connections[0];
+          setCurrentConnection(connection);
+          setCurrentView('dashboard');
+          
+          // Load latest schema snapshot
+          const snapshots = await SchemaSnapshot.filter(
+            { connection_id: connection.id }, 
+            '-snapshot_date', 
+            1
+          );
+          if (snapshots.length > 0) {
+            setLatestSnapshot(snapshots[0]);
+          }
+        }
+      } catch (error) {
+        console.error('Failed to load existing connection:', error);
+      }
+    };
+
+    loadExistingConnection();
+  }, [setCurrentConnection]);
+
+  const handleConnectionSuccess = async (connection: any) => {
+    setCurrentConnection(connection);
+    setCurrentView('dashboard');
+    
+    // Automatically introspect schema after connection
+    try {
+      await introspectSchema(connection.id);
+    } catch (error) {
+      console.error('Failed to introspect schema:', error);
+    }
+  };
+
+  const handleSchemaRefresh = async () => {
+    if (currentConnection) {
+      await introspectSchema(currentConnection.id);
+    }
+  };
+
+  const handleTransformationComplete = async () => {
+    // Refresh schema after transformation
+    await handleSchemaRefresh();
+  };
+
+  const handleNewConnection = () => {
+    setCurrentConnection(null);
+    setCurrentView('connect');
+    setLatestSnapshot(null);
+  };
+
+  if (currentView === 'connect') {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-50 p-6">
+        <div className="max-w-6xl mx-auto">
+          <div className="text-center mb-8">
+            <h1 className="text-4xl font-bold text-gray-900 mb-4">
+              AI Database Agent
+            </h1>
+            <p className="text-xl text-gray-600 max-w-2xl mx-auto">
+              Connect to your PostgreSQL database and let AI agents generate diagrams and perform intelligent transformations.
+            </p>
+          </div>
+          
+          <DatabaseConnectionForm onConnectionSuccess={handleConnectionSuccess} />
+          
+          <div className="mt-12 grid md:grid-cols-3 gap-6">
+            <Card>
+              <CardHeader>
+                <Database className="h-8 w-8 text-primary mb-2" />
+                <CardTitle>Database Connection</CardTitle>
+                <CardDescription>
+                  Securely connect to your PostgreSQL database with full SSL support.
+                </CardDescription>
+              </CardHeader>
+            </Card>
+            
+            <Card>
+              <CardHeader>
+                <GitBranch className="h-8 w-8 text-primary mb-2" />
+                <CardTitle>Schema Visualization</CardTitle>
+                <CardDescription>
+                  Automatically generate beautiful ER diagrams from your database schema.
+                </CardDescription>
+              </CardHeader>
+            </Card>
+            
+            <Card>
+              <CardHeader>
+                <Zap className="h-8 w-8 text-primary mb-2" />
+                <CardTitle>AI Transformations</CardTitle>
+                <CardDescription>
+                  Describe changes in plain English and get SQL transformations with confirmation.
+                </CardDescription>
+              </CardHeader>
+            </Card>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-100">
-      <div className="text-center">
-        <h1 className="text-4xl font-bold mb-4">Welcome to Your Blank App</h1>
-        <p className="text-xl text-gray-600">Start building your amazing project here!</p>
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-50 p-6">
+      <div className="max-w-7xl mx-auto">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-8">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">Database Dashboard</h1>
+            <div className="flex items-center gap-2 mt-2">
+              <Badge variant="secondary" className="flex items-center gap-1">
+                <Database className="h-3 w-3" />
+                {currentConnection?.name}
+              </Badge>
+              <Badge variant="outline">
+                {currentConnection?.database}@{currentConnection?.host}
+              </Badge>
+            </div>
+          </div>
+          
+          <div className="flex gap-3">
+            <Button variant="outline" onClick={handleNewConnection}>
+              <Settings className="h-4 w-4 mr-2" />
+              New Connection
+            </Button>
+          </div>
+        </div>
+
+        {/* Main Content */}
+        <Tabs defaultValue="diagram" className="space-y-6">
+          <TabsList className="grid w-full grid-cols-3">
+            <TabsTrigger value="diagram">ER Diagram</TabsTrigger>
+            <TabsTrigger value="schema">Schema Details</TabsTrigger>
+            <TabsTrigger value="transform">AI Transformations</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="diagram" className="space-y-6">
+            <DiagramRenderer
+              diagram={latestSnapshot?.mermaid_diagram || ''}
+              isLoading={isIntrospecting}
+              onRefresh={handleSchemaRefresh}
+            />
+          </TabsContent>
+
+          <TabsContent value="schema" className="space-y-6">
+            {schema ? (
+              <SchemaViewer schema={schema} />
+            ) : (
+              <Card>
+                <CardContent className="flex items-center justify-center h-64">
+                  {isIntrospecting ? (
+                    <div className="flex items-center gap-2 text-muted-foreground">
+                      <Loader2 className="h-5 w-5 animate-spin" />
+                      Analyzing database schema...
+                    </div>
+                  ) : (
+                    <div className="text-center">
+                      <p className="text-muted-foreground mb-4">No schema data available.</p>
+                      <Button onClick={handleSchemaRefresh}>
+                        Analyze Schema
+                      </Button>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+          </TabsContent>
+
+          <TabsContent value="transform" className="space-y-6">
+            {currentConnection ? (
+              <TransformationAgent
+                connectionId={currentConnection.id}
+                onTransformationComplete={handleTransformationComplete}
+              />
+            ) : (
+              <Card>
+                <CardContent className="flex items-center justify-center h-64">
+                  <p className="text-muted-foreground">No database connection available.</p>
+                </CardContent>
+              </Card>
+            )}
+          </TabsContent>
+        </Tabs>
       </div>
     </div>
   );

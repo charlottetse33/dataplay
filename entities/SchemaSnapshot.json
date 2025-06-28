@@ -1,0 +1,36 @@
+{
+  "name": "SchemaSnapshot",
+  "description": "Stores database schema snapshots for diagram generation",
+  "properties": {
+    "connection_id": {
+      "type": "string",
+      "description": "Reference to the database connection"
+    },
+    "schema_name": {
+      "type": "string",
+      "description": "Name of the database schema"
+    },
+    "tables": {
+      "type": "array",
+      "description": "Array of table definitions",
+      "items": {
+        "type": "object"
+      }
+    },
+    "relationships": {
+      "type": "array",
+      "description": "Array of foreign key relationships",
+      "items": {
+        "type": "object"
+      }
+    },
+    "mermaid_diagram": {
+      "type": "string",
+      "description": "Generated Mermaid.js diagram code"
+    },
+    "snapshot_date": {
+      "type": "string",
+      "description": "When this snapshot was taken"
+    }
+  }
+}
