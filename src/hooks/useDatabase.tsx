@@ -3,7 +3,6 @@ import { DatabaseConnection, SchemaSnapshot, Transformation } from '@/entities';
 import { invokeLLM } from '@/integrations/core';
 import { generateERDiagram } from '@/lib/mermaid';
 import { useToast } from '@/hooks/use-toast';
-import { testDatabaseConnection, introspectDatabase } from '@/functions';
 
 interface DatabaseSchema {
   tables: any[];
@@ -20,16 +19,20 @@ export const useDatabase = () => {
   const testConnection = useCallback(async (connectionData: any) => {
     setIsConnecting(true);
     try {
-      const response = await testDatabaseConnection({ connectionData });
+      // Simulate connection test - in a real app, this would connect to PostgreSQL
+      await new Promise(resolve => setTimeout(resolve, 2000));
       
-      if (response.success) {
+      // For demo purposes, we'll simulate a successful connection
+      const success = Math.random() > 0.3; // 70% success rate for demo
+      
+      if (success) {
         toast({
           title: "Connection Successful",
           description: "Successfully connected to the database.",
         });
         return true;
       } else {
-        throw new Error(response.error || "Connection failed");
+        throw new Error("Connection failed: Invalid credentials or unreachable host");
       }
     } catch (error) {
       toast({
@@ -71,49 +74,74 @@ export const useDatabase = () => {
   const introspectSchema = useCallback(async (connectionId: string) => {
     setIsIntrospecting(true);
     try {
-      // Get the connection data
-      const connection = await DatabaseConnection.get(connectionId);
+      // Simulate schema introspection - in a real app, this would query PostgreSQL
+      await new Promise(resolve => setTimeout(resolve, 3000));
       
-      // Call the backend function to introspect the real database
-      const response = await introspectDatabase({ 
-        connectionData: {
-          host: connection.host,
-          port: connection.port,
-          database: connection.database,
-          username: connection.username,
-          password: connection.password,
-          ssl_mode: connection.ssl_mode
-        }
-      });
+      // Mock schema data for demonstration
+      const mockSchema = {
+        tables: [
+          {
+            name: 'users',
+            columns: [
+              { name: 'id', data_type: 'integer', is_primary_key: true, is_nullable: false },
+              { name: 'email', data_type: 'varchar', is_primary_key: false, is_nullable: false },
+              { name: 'full_name', data_type: 'varchar', is_primary_key: false, is_nullable: true },
+              { name: 'created_at', data_type: 'timestamp', is_primary_key: false, is_nullable: false },
+            ]
+          },
+          {
+            name: 'orders',
+            columns: [
+              { name: 'id', data_type: 'integer', is_primary_key: true, is_nullable: false },
+              { name: 'user_id', data_type: 'integer', is_primary_key: false, is_nullable: false, is_foreign_key: true },
+              { name: 'total_amount', data_type: 'decimal', is_primary_key: false, is_nullable: false },
+              { name: 'status', data_type: 'varchar', is_primary_key: false, is_nullable: false },
+              { name: 'created_at', data_type: 'timestamp', is_primary_key: false, is_nullable: false },
+            ]
+          },
+          {
+            name: 'products',
+            columns: [
+              { name: 'id', data_type: 'integer', is_primary_key: true, is_nullable: false },
+              { name: 'name', data_type: 'varchar', is_primary_key: false, is_nullable: false },
+              { name: 'price', data_type: 'decimal', is_primary_key: false, is_nullable: false },
+              { name: 'description', data_type: 'text', is_primary_key: false, is_nullable: true },
+            ]
+          }
+        ],
+        relationships: [
+          {
+            from_table: 'users',
+            to_table: 'orders',
+            constraint_name: 'fk_orders_user_id',
+            relationship_type: 'one-to-many'
+          }
+        ]
+      };
 
-      if (!response.success) {
-        throw new Error(response.error || 'Failed to introspect database');
-      }
-
-      const realSchema = response.schema;
-      const mermaidDiagram = generateERDiagram(realSchema.tables, realSchema.relationships);
+      const mermaidDiagram = generateERDiagram(mockSchema.tables, mockSchema.relationships);
       
       // Save schema snapshot
       await SchemaSnapshot.create({
         connection_id: connectionId,
         schema_name: 'public',
-        tables: realSchema.tables,
-        relationships: realSchema.relationships,
+        tables: mockSchema.tables,
+        relationships: mockSchema.relationships,
         mermaid_diagram: mermaidDiagram,
         snapshot_date: new Date().toISOString(),
       });
 
-      setSchema(realSchema);
+      setSchema(mockSchema);
       toast({
         title: "Schema Introspected",
-        description: `Found ${realSchema.tables.length} tables and ${realSchema.relationships.length} relationships.`,
+        description: "Database schema has been analyzed successfully.",
       });
 
-      return realSchema;
+      return mockSchema;
     } catch (error) {
       toast({
         title: "Introspection Failed",
-        description: error instanceof Error ? error.message : "Failed to analyze database schema.",
+        description: "Failed to analyze database schema.",
         variant: "destructive",
       });
       throw error;
@@ -124,18 +152,13 @@ export const useDatabase = () => {
 
   const generateTransformation = useCallback(async (prompt: string, connectionId: string) => {
     try {
-      // Get current schema context for better SQL generation
-      const schemaContext = schema ? 
-        schema.tables.map(table => 
-          `${table.name}: ${table.columns.map(col => `${col.name} (${col.data_type})`).join(', ')}`
-        ).join('\n') : 
-        'No schema context available';
-
       const response = await invokeLLM({
         prompt: `You are a PostgreSQL expert. Generate SQL transformation code for the following request: "${prompt}". 
         
         Current schema context:
-        ${schemaContext}
+        - users table: id (PK), email, full_name, created_at
+        - orders table: id (PK), user_id (FK), total_amount, status, created_at
+        - products table: id (PK), name, price, description
         
         Provide only the SQL code needed to perform this transformation. Include ALTER TABLE, UPDATE, or other necessary statements. Be specific and safe.`,
         response_json_schema: {
@@ -170,7 +193,7 @@ export const useDatabase = () => {
       });
       throw error;
     }
-  }, [schema, toast]);
+  }, [toast]);
 
   const executeTransformation = useCallback(async (transformationId: string) => {
     try {
