@@ -3,6 +3,7 @@ import { DatabaseConnection, SchemaSnapshot, Transformation } from '@/entities';
 import { invokeLLM } from '@/integrations/core';
 import { generateERDiagram } from '@/lib/mermaid';
 import { useToast } from '@/hooks/use-toast';
+import { testDatabaseConnection, introspectDatabase, executeSqlTransformation } from '@/functions';
 
 interface DatabaseSchema {
   tables: any[];
@@ -19,20 +20,16 @@ export const useDatabase = () => {
   const testConnection = useCallback(async (connectionData: any) => {
     setIsConnecting(true);
     try {
-      // Simulate connection test - in a real app, this would connect to PostgreSQL
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      const response = await testDatabaseConnection({ connectionData });
       
-      // For demo purposes, we'll simulate a successful connection
-      const success = Math.random() > 0.3; // 70% success rate for demo
-      
-      if (success) {
+      if (response.success) {
         toast({
           title: "Connection Successful",
           description: "Successfully connected to the database.",
         });
         return true;
       } else {
-        throw new Error("Connection failed: Invalid credentials or unreachable host");
+        throw new Error(response.error || "Connection failed");
       }
     } catch (error) {
       toast({
@@ -74,74 +71,53 @@ export const useDatabase = () => {
   const introspectSchema = useCallback(async (connectionId: string) => {
     setIsIntrospecting(true);
     try {
-      // Simulate schema introspection - in a real app, this would query PostgreSQL
-      await new Promise(resolve => setTimeout(resolve, 3000));
-      
-      // Mock schema data for demonstration
-      const mockSchema = {
-        tables: [
-          {
-            name: 'users',
-            columns: [
-              { name: 'id', data_type: 'integer', is_primary_key: true, is_nullable: false },
-              { name: 'email', data_type: 'varchar', is_primary_key: false, is_nullable: false },
-              { name: 'full_name', data_type: 'varchar', is_primary_key: false, is_nullable: true },
-              { name: 'created_at', data_type: 'timestamp', is_primary_key: false, is_nullable: false },
-            ]
-          },
-          {
-            name: 'orders',
-            columns: [
-              { name: 'id', data_type: 'integer', is_primary_key: true, is_nullable: false },
-              { name: 'user_id', data_type: 'integer', is_primary_key: false, is_nullable: false, is_foreign_key: true },
-              { name: 'total_amount', data_type: 'decimal', is_primary_key: false, is_nullable: false },
-              { name: 'status', data_type: 'varchar', is_primary_key: false, is_nullable: false },
-              { name: 'created_at', data_type: 'timestamp', is_primary_key: false, is_nullable: false },
-            ]
-          },
-          {
-            name: 'products',
-            columns: [
-              { name: 'id', data_type: 'integer', is_primary_key: true, is_nullable: false },
-              { name: 'name', data_type: 'varchar', is_primary_key: false, is_nullable: false },
-              { name: 'price', data_type: 'decimal', is_primary_key: false, is_nullable: false },
-              { name: 'description', data_type: 'text', is_primary_key: false, is_nullable: true },
-            ]
-          }
-        ],
-        relationships: [
-          {
-            from_table: 'users',
-            to_table: 'orders',
-            constraint_name: 'fk_orders_user_id',
-            relationship_type: 'one-to-many'
-          }
-        ]
-      };
+      // Get the connection data
+      const connection = await DatabaseConnection.get(connectionId);
+      if (!connection) {
+        throw new Error("Connection not found");
+      }
 
-      const mermaidDiagram = generateERDiagram(mockSchema.tables, mockSchema.relationships);
+      // Call the backend function to introspect the real database
+      const response = await introspectDatabase({ 
+        connectionData: {
+          host: connection.host,
+          port: connection.port,
+          database: connection.database,
+          username: connection.username,
+          password: connection.password,
+          ssl_mode: connection.ssl_mode
+        }
+      });
+
+      if (!response.success) {
+        throw new Error(response.error || "Failed to introspect database");
+      }
+
+      const { schema: dbSchema } = response;
+      const mermaidDiagram = generateERDiagram(dbSchema.tables, dbSchema.relationships);
       
       // Save schema snapshot
       await SchemaSnapshot.create({
         connection_id: connectionId,
         schema_name: 'public',
-        tables: mockSchema.tables,
-        relationships: mockSchema.relationships,
+        tables: dbSchema.tables,
+        relationships: dbSchema.relationships,
         mermaid_diagram: mermaidDiagram,
         snapshot_date: new Date().toISOString(),
       });
 
-      setSchema(mockSchema);
+      setSchema(dbSchema);
       toast({
         title: "Schema Introspected",
         description: "Database schema has been analyzed successfully.",
       });
 
-      return mockSchema;
+      return dbSchema;
     } catch (error) {
+      console.error('Introspection error:', error);
       toast({
         title: "Introspection Failed",
-        description: "Failed to analyze database schema.",
+        description: error instanceof Error ? error.message : "Failed to analyze database schema.",
         variant: "destructive",
       });
       throw error;
@@ -152,15 +128,31 @@ export const useDatabase = () => {
 
   const generateTransformation = useCallback(async (prompt: string, connectionId: string) => {
     try {
+      // Get current schema context for better SQL generation
+      const snapshots = await SchemaSnapshot.filter(
+        { connection_id: connectionId }, 
+        '-snapshot_date', 
+        1
+      );
+      
+      let schemaContext = "No schema information available";
+      if (snapshots.length > 0) {
+        const tables = snapshots[0].tables;
+        schemaContext = tables.map((table: any) => {
+          const columns = table.columns.map((col: any) => 
+            `${col.name} (${col.data_type}${col.is_primary_key ? ', PK' : ''}${col.is_foreign_key ? ', FK' : ''})`
+          ).join(', ');
+          return `${table.name}: ${columns}`;
+        }).join('\n');
+      }
+
       const response = await invokeLLM({
         prompt: `You are a PostgreSQL expert. Generate SQL transformation code for the following request: "${prompt}". 
         
         Current schema context:
-        - users table: id (PK), email, full_name, created_at
-        - orders table: id (PK), user_id (FK), total_amount, status, created_at
-        - products table: id (PK), name, price, description
+        ${schemaContext}
         
-        Provide only the SQL code needed to perform this transformation. Include ALTER TABLE, UPDATE, or other necessary statements. Be specific and safe.`,
+        Provide only the SQL code needed to perform this transformation. Include ALTER TABLE, UPDATE, or other necessary statements. Be specific and safe. Make sure the SQL is valid PostgreSQL syntax.`,
         response_json_schema: {
           type: "object",
           properties: {
@@ -197,13 +189,38 @@ export const useDatabase = () => {
 
   const executeTransformation = useCallback(async (transformationId: string) => {
     try {
-      // Simulate SQL execution
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
+      // Get the transformation and connection data
+      const transformation = await Transformation.get(transformationId);
+      if (!transformation) {
+        throw new Error("Transformation not found");
+      }
+
+      const connection = await DatabaseConnection.get(transformation.connection_id);
+      if (!connection) {
+        throw new Error("Connection not found");
+      }
+
+      // Execute the SQL transformation on the real database
+      const response = await executeSqlTransformation({
+        connectionData: {
+          host: connection.host,
+          port: connection.port,
+          database: connection.database,
+          username: connection.username,
+          password: connection.password,
+          ssl_mode: connection.ssl_mode
+        },
+        sqlCode: transformation.generated_sql
+      });
+
+      if (!response.success) {
+        throw new Error(response.error || "Failed to execute transformation");
+      }
+
       // Update transformation status
       await Transformation.update(transformationId, {
         execution_status: 'executed',
-        execution_result: 'Transformation completed successfully',
+        execution_result: response.result || 'Transformation completed successfully',
         execution_date: new Date().toISOString(),
       });
 
@@ -212,7 +229,7 @@ export const useDatabase = () => {
         description: "SQL transformation has been applied successfully.",
       });
 
-      // Re-introspect schema after transformation
+      // Re-introspect schema after transformation to get updated structure
       if (currentConnection) {
         await introspectSchema(currentConnection.id);
       }
@@ -226,7 +243,7 @@ export const useDatabase = () => {
 
       toast({
         title: "Execution Failed",
-        description: "Failed to execute SQL transformation.",
+        description: error instanceof Error ? error.message : "Failed to execute SQL transformation.",
         variant: "destructive",
       });
       throw error;
