@@ -193,8 +193,6 @@ export const SampleDataViewer: React.FC<SampleDataViewerProps> = ({
           } else {
             row[column.name] = `Sample description for ${table.name} ${i}`;
           }
-        } else if (columnName.includes('phone')) {
-          row[column.name] = `+1-555-${String(Math.floor(Math.random() * 900) + 100)}-${String(Math.floor(Math.random() * 9000) + 1000)}`;
         } else if (columnName.includes('url') || columnName.includes('avatar')) {
           row[column.name] = `https://example.com/${columnName}/${i}.jpg`;
         } else if (columnName.includes('sku')) {
@@ -221,16 +219,9 @@ export const SampleDataViewer: React.FC<SampleDataViewerProps> = ({
     setIsLoading(false);
   };
 
-  const formatCellValue = (value: any, column: any, tableName: string) => {
-    // Check if this is an AI-generated column
-    const isAIColumn = !isOriginalColumn(tableName, column.name);
-    
+  const formatCellValue = (value: any, column: any) => {
     if (value === null || value === undefined) {
-      return (
-        <span className={`italic ${isAIColumn ? 'text-orange-500' : 'text-gray-400'}`}>
-          {isAIColumn ? 'AI COLUMN' : 'NULL'}
-        </span>
-      );
+      return <span className="text-gray-400 italic">NULL</span>;
     }
     
     if (typeof value === 'boolean') {
@@ -340,9 +331,6 @@ export const SampleDataViewer: React.FC<SampleDataViewerProps> = ({
                   <TabsTrigger key={table.name} value={table.name} className="flex items-center gap-2">
                     <Database className="h-4 w-4" />
                     {table.name}
-                    {!isOriginalTable(table.name) && (
-                      <Badge variant="secondary" className="text-xs ml-1">AI</Badge>
-                    )}
                   </TabsTrigger>
                 ))}
               </TabsList>
@@ -355,27 +343,22 @@ export const SampleDataViewer: React.FC<SampleDataViewerProps> = ({
                   <TabsContent key={table.name} value={table.name} className="space-y-4">
                     <div className="flex items-center justify-between">
                       <div>
-                        <h3 className="text-lg font-semibold flex items-center gap-2">
-                          {table.name}
-                          {isAIGenerated && (
-                            <Badge variant="secondary" className="text-xs">AI Generated</Badge>
-                          )}
-                        </h3>
+                        <h3 className="text-lg font-semibold">{table.name}</h3>
                         <p className="text-sm text-muted-foreground">
                           {table.columns.length} columns • {isAIGenerated ? 'No sample data' : `${sampleData.length} sample rows`}
                         </p>
                       </div>
                       <Badge variant="outline">
-                        {isAIGenerated ? 'AI Table' : 'Demo Data'}
+                        {isAIGenerated ? 'New Table' : 'Demo Data'}
                       </Badge>
                     </div>
 
                     {isAIGenerated ? (
                       <div className="border rounded-lg p-8 text-center bg-muted/20">
                         <AlertCircle className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                        <h4 className="text-lg font-semibold mb-2">AI-Generated Table</h4>
+                        <h4 className="text-lg font-semibold mb-2">New Table</h4>
                         <p className="text-muted-foreground mb-4">
-                          This table was created by AI transformation. No sample data is available.
+                          This table was recently created. No sample data is available yet.
                         </p>
                         <div className="text-left max-w-md mx-auto">
                           <h5 className="font-semibold mb-2">Table Structure:</h5>
@@ -402,33 +385,24 @@ export const SampleDataViewer: React.FC<SampleDataViewerProps> = ({
                         <Table>
                           <TableHeader>
                             <TableRow className="bg-muted/50">
-                              {table.columns.map((column: any) => {
-                                const isAIColumn = !isOriginalColumn(table.name, column.name);
-                                return (
-                                  <TableHead key={column.name} className="font-semibold">
-                                    <div className="flex flex-col">
-                                      <span className={isAIColumn ? 'text-orange-600' : ''}>
-                                        {column.name}
-                                        {isAIColumn && <span className="text-xs ml-1">(AI)</span>}
-                                      </span>
-                                      <div className="flex items-center gap-1 mt-1">
-                                        <Badge variant="outline" className="text-xs">
-                                          {column.data_type}
-                                        </Badge>
-                                        {column.is_primary_key && (
-                                          <Badge variant="default" className="text-xs">PK</Badge>
-                                        )}
-                                        {column.is_foreign_key && (
-                                          <Badge variant="secondary" className="text-xs">FK</Badge>
-                                        )}
-                                        {isAIColumn && (
-                                          <Badge variant="outline" className="text-xs bg-orange-100 text-orange-800">AI</Badge>
-                                        )}
-                                      </div>
+                              {table.columns.map((column: any) => (
+                                <TableHead key={column.name} className="font-semibold">
+                                  <div className="flex flex-col">
+                                    <span>{column.name}</span>
+                                    <div className="flex items-center gap-1 mt-1">
+                                      <Badge variant="outline" className="text-xs">
+                                        {column.data_type}
+                                      </Badge>
+                                      {column.is_primary_key && (
+                                        <Badge variant="default" className="text-xs">PK</Badge>
+                                      )}
+                                      {column.is_foreign_key && (
+                                        <Badge variant="secondary" className="text-xs">FK</Badge>
+                                      )}
                                     </div>
-                                  </TableHead>
-                                );
-                              })}
+                                  </div>
+                                </TableHead>
+                              ))}
                             </TableRow>
                           </TableHeader>
                           <TableBody>
@@ -436,7 +410,7 @@ export const SampleDataViewer: React.FC<SampleDataViewerProps> = ({
                               <TableRow key={rowIndex}>
                                 {table.columns.map((column: any) => (
                                   <TableCell key={column.name} className="max-w-xs">
-                                    {formatCellValue(row[column.name], column, table.name)}
+                                    {formatCellValue(row[column.name], column)}
                                   </TableCell>
                                 ))}
                               </TableRow>
@@ -449,17 +423,12 @@ export const SampleDataViewer: React.FC<SampleDataViewerProps> = ({
                     <div className="text-xs text-muted-foreground bg-muted/30 p-3 rounded">
                       {isAIGenerated ? (
                         <>
-                          🤖 This table was created by AI transformation. In a real database, this table would contain actual data populated by the SQL transformation.
+                          💡 This table was recently created. In a real database, this table would contain actual data.
                         </>
                       ) : (
                         <>
                           💡 This is sample data generated for demonstration purposes. 
                           In a real application, this would show actual data from your database.
-                          {table.columns.some((col: any) => !isOriginalColumn(table.name, col.name)) && (
-                            <span className="block mt-1 text-orange-600">
-                              🔶 Orange columns were added by AI transformation and show as "AI COLUMN".
-                            </span>
-                          )}
                         </>
                       )}
                     </div>
