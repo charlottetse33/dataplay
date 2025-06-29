@@ -61,6 +61,79 @@ export const useDatabase = () => {
     }
   }, [toast]);
 
+  const validateSqlOperation = useCallback((sqlCode: string, currentSchema: any) => {
+    const sqlLower = sqlCode.toLowerCase();
+    const errors: string[] = [];
+
+    // Validate ALTER TABLE operations
+    if (sqlLower.includes('alter table')) {
+      const tableMatch = sqlCode.match(/alter table\s+(\w+)/i);
+      if (tableMatch) {
+        const tableName = tableMatch[1];
+        const table = currentSchema.tables.find((t: any) => t.name.toLowerCase() === tableName.toLowerCase());
+        
+        if (!table) {
+          errors.push(`Table '${tableName}' does not exist in the current schema`);
+        } else {
+          // Validate DROP COLUMN
+          if (sqlLower.includes('drop column')) {
+            const dropMatch = sqlCode.match(/drop column\s+(\w+)/i);
+            if (dropMatch) {
+              const columnName = dropMatch[1];
+              const column = table.columns.find((c: any) => c.name.toLowerCase() === columnName.toLowerCase());
+              if (!column) {
+                errors.push(`Column '${columnName}' does not exist in table '${tableName}'`);
+              }
+            }
+          }
+          
+          // Validate ADD COLUMN (check for duplicates)
+          if (sqlLower.includes('add column')) {
+            const addMatch = sqlCode.match(/add column\s+(\w+)/i);
+            if (addMatch) {
+              const columnName = addMatch[1];
+              const column = table.columns.find((c: any) => c.name.toLowerCase() === columnName.toLowerCase());
+              if (column) {
+                errors.push(`Column '${columnName}' already exists in table '${tableName}'`);
+              }
+            }
+          }
+
+          // Validate RENAME COLUMN
+          if (sqlLower.includes('rename column')) {
+            const renameMatch = sqlCode.match(/rename column\s+(\w+)\s+to\s+(\w+)/i);
+            if (renameMatch) {
+              const [, oldName, newName] = renameMatch;
+              const oldColumn = table.columns.find((c: any) => c.name.toLowerCase() === oldName.toLowerCase());
+              const newColumn = table.columns.find((c: any) => c.name.toLowerCase() === newName.toLowerCase());
+              
+              if (!oldColumn) {
+                errors.push(`Column '${oldName}' does not exist in table '${tableName}'`);
+              }
+              if (newColumn) {
+                errors.push(`Column '${newName}' already exists in table '${tableName}'`);
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // Validate CREATE TABLE (check for duplicates)
+    if (sqlLower.includes('create table')) {
+      const createMatch = sqlCode.match(/create table\s+(\w+)/i);
+      if (createMatch) {
+        const tableName = createMatch[1];
+        const existingTable = currentSchema.tables.find((t: any) => t.name.toLowerCase() === tableName.toLowerCase());
+        if (existingTable) {
+          errors.push(`Table '${tableName}' already exists in the schema`);
+        }
+      }
+    }
+
+    return errors;
+  }, []);
+
   const applySchemaChanges = useCallback(async (sqlCode: string, connectionId: string) => {
     try {
       // Get the current schema
@@ -76,6 +149,12 @@ export const useDatabase = () => {
 
       let updatedSchema = JSON.parse(JSON.stringify(snapshots[0])); // Deep clone
       let changeDescription = "";
+
+      // Validate the SQL operation first
+      const validationErrors = validateSqlOperation(sqlCode, updatedSchema);
+      if (validationErrors.length > 0) {
+        throw new Error(`SQL validation failed: ${validationErrors.join(', ')}`);
+      }
 
       // Parse SQL and apply changes to mock schema
       const sqlLower = sqlCode.toLowerCase();
@@ -153,8 +232,11 @@ export const useDatabase = () => {
           const [, tableName, columnName] = dropMatch;
           const table = updatedSchema.tables.find((t: any) => t.name.toLowerCase() === tableName.toLowerCase());
           if (table) {
+            const originalLength = table.columns.length;
             table.columns = table.columns.filter((c: any) => c.name.toLowerCase() !== columnName.toLowerCase());
-            changeDescription = `Dropped column '${columnName}' from table '${tableName}'`;
+            if (table.columns.length < originalLength) {
+              changeDescription = `Dropped column '${columnName}' from table '${tableName}'`;
+            }
           }
         }
       }
@@ -184,7 +266,7 @@ export const useDatabase = () => {
       console.error('Failed to apply schema changes:', error);
       throw error;
     }
-  }, []);
+  }, [validateSqlOperation]);
 
   const generateTransformation = useCallback(async (prompt: string, connectionId: string) => {
     try {
@@ -219,6 +301,8 @@ export const useDatabase = () => {
         ${schemaContext}
         
         Database type: ${databaseType}
+        
+        IMPORTANT: Only generate SQL that is valid for the current schema. Do not reference tables or columns that don't exist.
         
         Provide only the SQL code needed to perform this transformation. Include ALTER TABLE, UPDATE, or other necessary statements. Be specific and safe. Make sure the SQL is valid ${databaseType} syntax.
         
