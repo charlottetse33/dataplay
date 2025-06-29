@@ -24,20 +24,29 @@ export const DatabaseConnectionForm: React.FC<DatabaseConnectionFormProps> = ({ 
 
   const [isTesting, setIsTesting] = useState(false);
   const [testResult, setTestResult] = useState<'success' | 'error' | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string>('');
   const { testConnection, saveConnection, isConnecting } = useDatabase();
 
   const handleInputChange = (field: string, value: string | number) => {
     setFormData(prev => ({ ...prev, [field]: value }));
     setTestResult(null);
+    setErrorMessage('');
   };
 
   const handleTestConnection = async () => {
     setIsTesting(true);
+    setErrorMessage('');
     try {
+      console.log('Testing connection with form data:', { ...formData, password: '[HIDDEN]' });
       const success = await testConnection(formData);
       setTestResult(success ? 'success' : 'error');
+      if (!success) {
+        setErrorMessage('Connection test failed. Please check your credentials.');
+      }
     } catch (error) {
+      console.error('Connection test error:', error);
       setTestResult('error');
+      setErrorMessage(error instanceof Error ? error.message : 'Unknown error occurred');
     } finally {
       setIsTesting(false);
     }
@@ -150,7 +159,7 @@ export const DatabaseConnectionForm: React.FC<DatabaseConnectionFormProps> = ({ 
 
         {testResult && (
           <div className={`p-3 rounded-md ${testResult === 'success' ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-700 border border-red-200'}`}>
-            {testResult === 'success' ? 'Connection test successful!' : 'Connection test failed. Please check your credentials.'}
+            {testResult === 'success' ? 'Connection test successful!' : errorMessage || 'Connection test failed. Please check your credentials.'}
           </div>
         )}
 
