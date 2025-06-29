@@ -39,7 +39,9 @@ export const useDatabase = () => {
         snapshot_date: new Date().toISOString(),
       });
 
+      // Update local schema state
       setSchema(schemaData);
+      
       toast({
         title: "Schema Loaded",
         description: `Generated ER diagram with ${schemaData.tables.length} tables and ${schemaData.relationships.length} relationships.`,
@@ -170,12 +172,13 @@ export const useDatabase = () => {
         snapshot_date: new Date().toISOString(),
       });
 
-      // Update local state
+      // Update local state with the new schema
       setSchema({
         tables: updatedSchema.tables,
         relationships: updatedSchema.relationships
       });
 
+      console.log('Schema updated successfully:', changeDescription);
       return changeDescription || "Schema updated successfully";
     } catch (error) {
       console.error('Failed to apply schema changes:', error);

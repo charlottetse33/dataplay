@@ -53,6 +53,7 @@ const Index = () => {
       );
       if (snapshots.length > 0) {
         setLatestSnapshot(snapshots[0]);
+        console.log('Refreshed snapshot:', snapshots[0]);
       }
     } catch (error) {
       console.error('Failed to refresh snapshot:', error);
@@ -74,6 +75,7 @@ const Index = () => {
   };
 
   const handleTransformationComplete = async () => {
+    console.log('Transformation completed, refreshing data...');
     // Refresh schema snapshot after transformation
     await refreshSnapshot();
   };
@@ -107,6 +109,13 @@ const Index = () => {
       setIsResetting(false);
     }
   };
+
+  // Auto-refresh snapshot when schema changes
+  useEffect(() => {
+    if (currentConnection && schema) {
+      refreshSnapshot();
+    }
+  }, [schema]);
 
   if (currentView === 'selector') {
     return (
@@ -159,6 +168,12 @@ const Index = () => {
     );
   }
 
+  // Get the current schema data to display
+  const currentSchemaData = latestSnapshot ? {
+    tables: latestSnapshot.tables,
+    relationships: latestSnapshot.relationships
+  } : schema;
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-50 p-6">
       <div className="max-w-7xl mx-auto">
@@ -177,6 +192,11 @@ const Index = () => {
               <Badge variant="outline">
                 Demo Mode
               </Badge>
+              {latestSnapshot && (
+                <Badge variant="outline" className="text-xs">
+                  Last updated: {new Date(latestSnapshot.snapshot_date).toLocaleTimeString()}
+                </Badge>
+              )}
             </div>
           </div>
           
@@ -223,12 +243,9 @@ const Index = () => {
           </TabsContent>
 
           <TabsContent value="schema" className="space-y-6">
-            {schema ? (
+            {currentSchemaData ? (
               <SchemaViewer 
-                schema={latestSnapshot ? {
-                  tables: latestSnapshot.tables,
-                  relationships: latestSnapshot.relationships
-                } : schema} 
+                schema={currentSchemaData}
                 onRefresh={refreshSnapshot}
                 isRefreshing={isRefreshing}
               />
