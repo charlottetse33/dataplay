@@ -75,7 +75,6 @@ export const useDatabase = () => {
   const introspectSchema = useCallback(async (connectionId: string) => {
     setIsIntrospecting(true);
     try {
-      // Get the connection data
       const connection = await DatabaseConnection.get(connectionId);
       if (!connection) {
         throw new Error("Connection not found");
@@ -83,7 +82,6 @@ export const useDatabase = () => {
 
       console.log('Starting introspection for connection:', connection.name);
 
-      // Call the backend function to introspect the real database
       const response = await introspectDatabase({ 
         connectionData: {
           host: connection.host,
@@ -104,7 +102,6 @@ export const useDatabase = () => {
       const { schema: dbSchema } = response;
       const mermaidDiagram = generateERDiagram(dbSchema.tables, dbSchema.relationships);
       
-      // Save schema snapshot
       await SchemaSnapshot.create({
         connection_id: connectionId,
         schema_name: dbSchema.schemas ? dbSchema.schemas.join(', ') : 'public',
@@ -136,7 +133,6 @@ export const useDatabase = () => {
 
   const generateTransformation = useCallback(async (prompt: string, connectionId: string) => {
     try {
-      // Get current schema context for better SQL generation
       const snapshots = await SchemaSnapshot.filter(
         { connection_id: connectionId }, 
         '-snapshot_date', 
@@ -197,7 +193,6 @@ export const useDatabase = () => {
 
   const executeTransformation = useCallback(async (transformationId: string) => {
     try {
-      // Get the transformation and connection data
       const transformation = await Transformation.get(transformationId);
       if (!transformation) {
         throw new Error("Transformation not found");
@@ -208,7 +203,6 @@ export const useDatabase = () => {
         throw new Error("Connection not found");
       }
 
-      // Execute the SQL transformation on the real database
       const response = await executeSqlTransformation({
         connectionData: {
           host: connection.host,
@@ -225,7 +219,6 @@ export const useDatabase = () => {
         throw new Error(response.error || "Failed to execute transformation");
       }
 
-      // Update transformation status
       await Transformation.update(transformationId, {
         execution_status: 'executed',
         execution_result: response.result || 'Transformation completed successfully',
@@ -237,7 +230,6 @@ export const useDatabase = () => {
         description: "SQL transformation has been applied successfully.",
       });
 
-      // Re-introspect schema after transformation to get updated structure
       if (currentConnection) {
         await introspectSchema(currentConnection.id);
       }
