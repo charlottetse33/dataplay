@@ -1,14 +1,18 @@
 {
   "name": "DatabaseConnection",
-  "description": "Stores PostgreSQL database connection information",
+  "description": "Stores database connection information for multiple database types",
   "properties": {
     "name": {
       "type": "string",
       "description": "Friendly name for the connection"
     },
+    "database_type": {
+      "type": "string",
+      "description": "Type of database (postgresql, mysql, sqlite, mongodb, etc.)"
+    },
     "host": {
       "type": "string",
-      "description": "Database host address"
+      "description": "Database host address (not required for SQLite)"
     },
     "port": {
       "type": "number",
@@ -16,11 +20,11 @@
     },
     "database": {
       "type": "string",
-      "description": "Database name"
+      "description": "Database name or file path for SQLite"
     },
     "username": {
       "type": "string",
-      "description": "Database username"
+      "description": "Database username (not required for SQLite)"
     },
     "password": {
       "type": "string",
@@ -29,6 +33,10 @@
     "ssl_mode": {
       "type": "string",
       "description": "SSL connection mode"
+    },
+    "connection_string": {
+      "type": "string",
+      "description": "Full connection string for databases that support it"
     },
     "is_active": {
       "type": "boolean",

@@ -86,10 +86,10 @@ const Index = () => {
         <div className="max-w-6xl mx-auto">
           <div className="text-center mb-8">
             <h1 className="text-4xl font-bold text-gray-900 mb-4">
-              AI Database Agent
+              Universal Database Agent
             </h1>
             <p className="text-xl text-gray-600 max-w-2xl mx-auto">
-              Connect to your PostgreSQL database and let AI agents generate diagrams and perform intelligent transformations.
+              Connect to any database (PostgreSQL, MySQL, SQLite, MongoDB, Redis) and let AI agents generate diagrams and perform intelligent transformations.
             </p>
           </div>
           
@@ -99,9 +99,9 @@ const Index = () => {
             <Card>
               <CardHeader>
                 <Database className="h-8 w-8 text-primary mb-2" />
-                <CardTitle>Database Connection</CardTitle>
+                <CardTitle>Multi-Database Support</CardTitle>
                 <CardDescription>
-                  Securely connect to your PostgreSQL database with full SSL support.
+                  Connect to PostgreSQL, MySQL, SQLite, MongoDB, and Redis databases with unified interface.
                 </CardDescription>
               </CardHeader>
             </Card>
@@ -109,9 +109,9 @@ const Index = () => {
             <Card>
               <CardHeader>
                 <GitBranch className="h-8 w-8 text-primary mb-2" />
-                <CardTitle>Schema Visualization</CardTitle>
+                <CardTitle>Universal Schema Analysis</CardTitle>
                 <CardDescription>
-                  Automatically generate beautiful ER diagrams from your database schema.
+                  Automatically analyze and visualize database schemas across different database types.
                 </CardDescription>
               </CardHeader>
             </Card>
@@ -119,9 +119,9 @@ const Index = () => {
             <Card>
               <CardHeader>
                 <Zap className="h-8 w-8 text-primary mb-2" />
-                <CardTitle>AI Transformations</CardTitle>
+                <CardTitle>Smart Transformations</CardTitle>
                 <CardDescription>
-                  Describe changes in plain English and get SQL transformations with confirmation.
+                  AI-powered SQL generation that adapts to your specific database type and syntax.
                 </CardDescription>
               </CardHeader>
             </Card>
@@ -144,7 +144,11 @@ const Index = () => {
                 {currentConnection?.name}
               </Badge>
               <Badge variant="outline">
-                {currentConnection?.database}@{currentConnection?.host}
+                {currentConnection?.database_type?.toUpperCase()}
+              </Badge>
+              <Badge variant="outline">
+                {currentConnection?.database}
+                {currentConnection?.host && `@${currentConnection.host}`}
               </Badge>
             </div>
           </div>

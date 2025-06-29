@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
 import { Loader2, Database, TestTube } from 'lucide-react';
 import { useDatabase } from '@/hooks/useDatabase';
 
@@ -11,15 +12,25 @@ interface DatabaseConnectionFormProps {
   onConnectionSuccess: (connection: any) => void;
 }
 
+const DATABASE_TYPES = [
+  { value: 'postgresql', label: 'PostgreSQL', defaultPort: 5432 },
+  { value: 'mysql', label: 'MySQL', defaultPort: 3306 },
+  { value: 'sqlite', label: 'SQLite', defaultPort: null },
+  { value: 'mongodb', label: 'MongoDB', defaultPort: 27017 },
+  { value: 'redis', label: 'Redis', defaultPort: 6379 },
+];
+
 export const DatabaseConnectionForm: React.FC<DatabaseConnectionFormProps> = ({ onConnectionSuccess }) => {
   const [formData, setFormData] = useState({
     name: '',
+    database_type: 'postgresql',
     host: 'localhost',
     port: 5432,
     database: '',
     username: '',
     password: '',
-    ssl_mode: 'prefer'
+    ssl_mode: 'prefer',
+    connection_string: ''
   });
 
   const [isTesting, setIsTesting] = useState(false);
@@ -29,6 +40,18 @@ export const DatabaseConnectionForm: React.FC<DatabaseConnectionFormProps> = ({ 
 
   const handleInputChange = (field: string, value: string | number) => {
     setFormData(prev => ({ ...prev, [field]: value }));
+    setTestResult(null);
+    setErrorMessage('');
+  };
+
+  const handleDatabaseTypeChange = (type: string) => {
+    const dbType = DATABASE_TYPES.find(db => db.value === type);
+    setFormData(prev => ({
+      ...prev,
+      database_type: type,
+      port: dbType?.defaultPort || prev.port,
+      host: type === 'sqlite' ? '' : 'localhost'
+    }));
     setTestResult(null);
     setErrorMessage('');
   };
@@ -61,17 +84,23 @@ export const DatabaseConnectionForm: React.FC<DatabaseConnectionFormProps> = ({ 
     }
   };
 
-  const isFormValid = formData.name && formData.host && formData.database && formData.username;
+  const selectedDbType = DATABASE_TYPES.find(db => db.value === formData.database_type);
+  const requiresHost = formData.database_type !== 'sqlite';
+  const supportsConnectionString = ['mongodb', 'redis'].includes(formData.database_type);
+
+  const isFormValid = formData.name && formData.database && 
+    (formData.database_type === 'sqlite' || formData.host) &&
+    (formData.database_type === 'sqlite' || formData.username);
 
   return (
     <Card className="w-full max-w-2xl mx-auto">
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Database className="h-5 w-5 text-primary" />
-          PostgreSQL Connection
+          Database Connection
         </CardTitle>
         <CardDescription>
-          Enter your PostgreSQL database credentials to connect and analyze your schema.
+          Connect to your database and let AI agents analyze your schema and perform transformations.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -86,76 +115,113 @@ export const DatabaseConnectionForm: React.FC<DatabaseConnectionFormProps> = ({ 
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="host">Host</Label>
-            <Input
-              id="host"
-              placeholder="localhost"
-              value={formData.host}
-              onChange={(e) => handleInputChange('host', e.target.value)}
-            />
+            <Label htmlFor="database_type">Database Type</Label>
+            <Select value={formData.database_type} onValueChange={handleDatabaseTypeChange}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {DATABASE_TYPES.map(db => (
+                  <SelectItem key={db.value} value={db.value}>
+                    {db.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <Label htmlFor="port">Port</Label>
-            <Input
-              id="port"
-              type="number"
-              placeholder="5432"
-              value={formData.port}
-              onChange={(e) => handleInputChange('port', parseInt(e.target.value) || 5432)}
-            />
+        {requiresHost && (
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="host">Host</Label>
+              <Input
+                id="host"
+                placeholder="localhost"
+                value={formData.host}
+                onChange={(e) => handleInputChange('host', e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="port">Port</Label>
+              <Input
+                id="port"
+                type="number"
+                placeholder={selectedDbType?.defaultPort?.toString() || ''}
+                value={formData.port}
+                onChange={(e) => handleInputChange('port', parseInt(e.target.value) || selectedDbType?.defaultPort || 5432)}
+              />
+            </div>
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="database">Database</Label>
-            <Input
-              id="database"
-              placeholder="myapp_production"
-              value={formData.database}
-              onChange={(e) => handleInputChange('database', e.target.value)}
-            />
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <Label htmlFor="username">Username</Label>
-            <Input
-              id="username"
-              placeholder="postgres"
-              value={formData.username}
-              onChange={(e) => handleInputChange('username', e.target.value)}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="password">Password</Label>
-            <Input
-              id="password"
-              type="password"
-              placeholder="••••••••"
-              value={formData.password}
-              onChange={(e) => handleInputChange('password', e.target.value)}
-            />
-          </div>
-        </div>
+        )}
 
         <div className="space-y-2">
-          <Label htmlFor="ssl_mode">SSL Mode</Label>
-          <Select value={formData.ssl_mode} onValueChange={(value) => handleInputChange('ssl_mode', value)}>
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="disable">Disable</SelectItem>
-              <SelectItem value="allow">Allow</SelectItem>
-              <SelectItem value="prefer">Prefer</SelectItem>
-              <SelectItem value="require">Require</SelectItem>
-              <SelectItem value="verify-ca">Verify CA</SelectItem>
-              <SelectItem value="verify-full">Verify Full</SelectItem>
-            </SelectContent>
-          </Select>
+          <Label htmlFor="database">
+            {formData.database_type === 'sqlite' ? 'Database File Path' : 'Database Name'}
+          </Label>
+          <Input
+            id="database"
+            placeholder={formData.database_type === 'sqlite' ? '/path/to/database.db' : 'myapp_production'}
+            value={formData.database}
+            onChange={(e) => handleInputChange('database', e.target.value)}
+          />
         </div>
+
+        {requiresHost && (
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="username">Username</Label>
+              <Input
+                id="username"
+                placeholder="username"
+                value={formData.username}
+                onChange={(e) => handleInputChange('username', e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="password">Password</Label>
+              <Input
+                id="password"
+                type="password"
+                placeholder="••••••••"
+                value={formData.password}
+                onChange={(e) => handleInputChange('password', e.target.value)}
+              />
+            </div>
+          </div>
+        )}
+
+        {supportsConnectionString && (
+          <div className="space-y-2">
+            <Label htmlFor="connection_string">Connection String (Optional)</Label>
+            <Textarea
+              id="connection_string"
+              placeholder={`${formData.database_type}://username:password@host:port/database`}
+              value={formData.connection_string}
+              onChange={(e) => handleInputChange('connection_string', e.target.value)}
+              rows={2}
+            />
+          </div>
+        )}
+
+        {['postgresql', 'mysql'].includes(formData.database_type) && (
+          <div className="space-y-2">
+            <Label htmlFor="ssl_mode">SSL Mode</Label>
+            <Select value={formData.ssl_mode} onValueChange={(value) => handleInputChange('ssl_mode', value)}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="disable">Disable</SelectItem>
+                <SelectItem value="allow">Allow</SelectItem>
+                <SelectItem value="prefer">Prefer</SelectItem>
+                <SelectItem value="require">Require</SelectItem>
+                <SelectItem value="verify-ca">Verify CA</SelectItem>
+                <SelectItem value="verify-full">Verify Full</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        )}
 
         {testResult && (
           <div className={`p-3 rounded-md ${testResult === 'success' ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-700 border border-red-200'}`}>
