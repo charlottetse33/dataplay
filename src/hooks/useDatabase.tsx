@@ -3,7 +3,6 @@ import { DatabaseConnection, SchemaSnapshot, Transformation } from '@/entities';
 import { invokeLLM } from '@/integrations/core';
 import { generateERDiagram } from '@/lib/mermaid';
 import { useToast } from '@/hooks/use-toast';
-import { testDatabaseConnection, introspectDatabase, executeSqlTransformation } from '@/functions';
 
 interface DatabaseSchema {
   tables: any[];
@@ -21,18 +20,31 @@ export const useDatabase = () => {
     setIsConnecting(true);
     try {
       console.log('Testing connection with data:', { ...connectionData, password: '[HIDDEN]' });
-      const response = await testDatabaseConnection({ connectionData });
       
-      console.log('Connection test response:', response);
+      // Direct API call to the function endpoint
+      const response = await fetch('/api/functions/test-database-connection', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ connectionData }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const result = await response.json();
+      console.log('Connection test response:', result);
       
-      if (response.success) {
+      if (result.success) {
         toast({
           title: "Connection Successful",
-          description: `Connected to database: ${response.details?.database || connectionData.database}`,
+          description: `Connected to database: ${result.details?.database || connectionData.database}`,
         });
         return true;
       } else {
-        throw new Error(response.error || "Connection failed");
+        throw new Error(result.error || "Connection failed");
       }
     } catch (error) {
       console.error('Connection test failed:', error);
@@ -82,24 +94,36 @@ export const useDatabase = () => {
 
       console.log('Starting introspection for connection:', connection.name);
 
-      const response = await introspectDatabase({ 
-        connectionData: {
-          host: connection.host,
-          port: connection.port,
-          database: connection.database,
-          username: connection.username,
-          password: connection.password,
-          ssl_mode: connection.ssl_mode
-        }
+      // Direct API call to the function endpoint
+      const response = await fetch('/api/functions/introspect-database', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ 
+          connectionData: {
+            host: connection.host,
+            port: connection.port,
+            database: connection.database,
+            username: connection.username,
+            password: connection.password,
+            ssl_mode: connection.ssl_mode
+          }
+        }),
       });
 
-      console.log('Introspection response:', response);
-
-      if (!response.success) {
-        throw new Error(response.error || "Failed to introspect database");
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      const { schema: dbSchema } = response;
+      const result = await response.json();
+      console.log('Introspection response:', result);
+
+      if (!result.success) {
+        throw new Error(result.error || "Failed to introspect database");
+      }
+
+      const { schema: dbSchema } = result;
       const mermaidDiagram = generateERDiagram(dbSchema.tables, dbSchema.relationships);
       
       await SchemaSnapshot.create({
@@ -203,25 +227,38 @@ export const useDatabase = () => {
         throw new Error("Connection not found");
       }
 
-      const response = await executeSqlTransformation({
-        connectionData: {
-          host: connection.host,
-          port: connection.port,
-          database: connection.database,
-          username: connection.username,
-          password: connection.password,
-          ssl_mode: connection.ssl_mode
+      // Direct API call to the function endpoint
+      const response = await fetch('/api/functions/execute-sql-transformation', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
         },
-        sqlCode: transformation.generated_sql
+        body: JSON.stringify({
+          connectionData: {
+            host: connection.host,
+            port: connection.port,
+            database: connection.database,
+            username: connection.username,
+            password: connection.password,
+            ssl_mode: connection.ssl_mode
+          },
+          sqlCode: transformation.generated_sql
+        }),
       });
 
-      if (!response.success) {
-        throw new Error(response.error || "Failed to execute transformation");
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const result = await response.json();
+
+      if (!result.success) {
+        throw new Error(result.error || "Failed to execute transformation");
       }
 
       await Transformation.update(transformationId, {
         execution_status: 'executed',
-        execution_result: response.result || 'Transformation completed successfully',
+        execution_result: result.result || 'Transformation completed successfully',
         execution_date: new Date().toISOString(),
       });
 
