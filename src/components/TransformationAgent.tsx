@@ -88,6 +88,7 @@ export const TransformationAgent: React.FC<TransformationAgentProps> = ({
   const handleExecute = async () => {
     if (!currentTransformation) return;
 
+    // Prevent execution if transformation failed validation
     if (currentTransformation.execution_status === 'failed' || currentTransformation.is_validation_failed) {
       return;
     }
@@ -127,6 +128,11 @@ export const TransformationAgent: React.FC<TransformationAgentProps> = ({
       case 'pending': return <AlertTriangle className="h-4 w-4 text-yellow-600" />;
       default: return <AlertTriangle className="h-4 w-4 text-gray-600" />;
     }
+  };
+
+  // Helper function to determine if transformation failed
+  const isTransformationFailed = (transformation: any) => {
+    return transformation.execution_status === 'failed' || transformation.is_validation_failed;
   };
 
   return (
@@ -185,12 +191,17 @@ export const TransformationAgent: React.FC<TransformationAgentProps> = ({
           </Card>
 
           {currentTransformation && (
-            <Card className={currentTransformation.execution_status === 'failed' || currentTransformation.is_validation_failed ? "border-red-200" : "border-blue-200"}>
+            <Card className={isTransformationFailed(currentTransformation) ? "border-red-200 bg-red-50/30" : "border-blue-200"}>
               <CardHeader>
                 <CardTitle className="flex items-center justify-between">
-                  <span>
-                    {currentTransformation.execution_status === 'failed' || currentTransformation.is_validation_failed ? 'Validation Failed' : 'Generated SQL Transformation'}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    {isTransformationFailed(currentTransformation) && (
+                      <XCircle className="h-5 w-5 text-red-600" />
+                    )}
+                    <span>
+                      {isTransformationFailed(currentTransformation) ? 'Transformation Failed' : 'Generated SQL Transformation'}
+                    </span>
+                  </div>
                   <Badge className={getRiskColor(currentTransformation.risk_level)}>
                     {currentTransformation.risk_level?.toUpperCase() || 'UNKNOWN'} RISK
                   </Badge>
@@ -206,11 +217,11 @@ export const TransformationAgent: React.FC<TransformationAgentProps> = ({
                   </pre>
                 </div>
 
-                {(currentTransformation.execution_status === 'failed' || currentTransformation.is_validation_failed) && (
+                {isTransformationFailed(currentTransformation) && (
                   <Alert variant="destructive">
                     <XCircle className="h-4 w-4" />
                     <AlertDescription>
-                      {currentTransformation.execution_result || currentTransformation.explanation}
+                      <strong>Validation Failed:</strong> {currentTransformation.execution_result || currentTransformation.explanation}
                     </AlertDescription>
                   </Alert>
                 )}
@@ -226,7 +237,7 @@ export const TransformationAgent: React.FC<TransformationAgentProps> = ({
                   </div>
                 )}
 
-                {!currentTransformation.execution_status || (currentTransformation.execution_status !== 'failed' && !currentTransformation.is_validation_failed) && (
+                {!isTransformationFailed(currentTransformation) && (
                   <Alert>
                     <AlertTriangle className="h-4 w-4" />
                     <AlertDescription>
@@ -236,7 +247,7 @@ export const TransformationAgent: React.FC<TransformationAgentProps> = ({
                 )}
 
                 <div className="flex gap-2">
-                  {!currentTransformation.execution_status || (currentTransformation.execution_status !== 'failed' && !currentTransformation.is_validation_failed) ? (
+                  {!isTransformationFailed(currentTransformation) ? (
                     <Button 
                       onClick={handleExecute} 
                       disabled={isExecuting}
@@ -327,13 +338,18 @@ export const TransformationAgent: React.FC<TransformationAgentProps> = ({
               ) : (
                 <div className="space-y-4">
                   {transformationHistory.map((transformation) => (
-                    <div key={transformation.id} className="border rounded-lg p-4">
+                    <div key={transformation.id} className={`border rounded-lg p-4 ${transformation.execution_status === 'failed' ? 'border-red-200 bg-red-50/30' : ''}`}>
                       <div className="flex items-start justify-between mb-2">
                         <div className="flex items-center gap-2">
                           {getStatusIcon(transformation.execution_status)}
                           <span className="font-medium text-sm">
                             {transformation.user_prompt}
                           </span>
+                          {transformation.execution_status === 'failed' && (
+                            <Badge variant="destructive" className="text-xs">
+                              Failed
+                            </Badge>
+                          )}
                         </div>
                         <Badge variant="outline" className="text-xs">
                           {new Date(transformation.created_at).toLocaleString()}
@@ -345,7 +361,7 @@ export const TransformationAgent: React.FC<TransformationAgentProps> = ({
                       </div>
                       
                       {transformation.execution_result && (
-                        <p className="text-sm text-gray-600">
+                        <p className={`text-sm ${transformation.execution_status === 'failed' ? 'text-red-600' : 'text-gray-600'}`}>
                           {transformation.execution_result}
                         </p>
                       )}
