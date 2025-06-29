@@ -1,16 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { ScrollArea } from '@/components/ui/scroll-area';
+import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
+import { History, Clock, CheckCircle, XCircle, AlertTriangle, Play, Loader2 } from 'lucide-react';
 import { Transformation } from '@/entities';
-import { Clock, CheckCircle, XCircle, AlertCircle, Code, Calendar, User } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 interface TransformationHistoryProps {
   connectionId: string;
-  onExecuteTransformation?: (transformationId: string) => Promise<boolean>;
+  onExecuteTransformation: (transformationId: string) => Promise<boolean>;
 }
 
 export const TransformationHistory: React.FC<TransformationHistoryProps> = ({
@@ -22,20 +21,24 @@ export const TransformationHistory: React.FC<TransformationHistoryProps> = ({
   const [executingId, setExecutingId] = useState<string | null>(null);
   const { toast } = useToast();
 
-  const fetchTransformations = async () => {
+  useEffect(() => {
+    loadTransformations();
+  }, [connectionId]);
+
+  const loadTransformations = async () => {
     try {
       setIsLoading(true);
-      const results = await Transformation.filter(
+      const data = await Transformation.filter(
         { connection_id: connectionId },
         '-created_at',
         20
       );
-      setTransformations(results);
+      setTransformations(data);
     } catch (error) {
-      console.error('Failed to fetch transformations:', error);
+      console.error('Failed to load transformations:', error);
       toast({
-        title: "Failed to Load History",
-        description: "Could not load transformation history.",
+        title: "Load Failed",
+        description: "Failed to load transformation history.",
         variant: "destructive",
       });
     } finally {
@@ -43,21 +46,13 @@ export const TransformationHistory: React.FC<TransformationHistoryProps> = ({
     }
   };
 
-  useEffect(() => {
-    if (connectionId) {
-      fetchTransformations();
-    }
-  }, [connectionId]);
-
   const handleExecute = async (transformationId: string) => {
-    if (!onExecuteTransformation) return;
-    
     setExecutingId(transformationId);
     try {
       const success = await onExecuteTransformation(transformationId);
       if (success) {
-        // Refresh the transformations list to show updated status
-        await fetchTransformations();
+        // Reload transformations to get updated status
+        await loadTransformations();
       }
     } catch (error) {
       console.error('Execution failed:', error);
@@ -68,40 +63,37 @@ export const TransformationHistory: React.FC<TransformationHistoryProps> = ({
 
   const getStatusIcon = (status: string) => {
     switch (status) {
-      case 'pending':
-        return <Clock className="h-4 w-4 text-yellow-500" />;
       case 'executed':
-        return <CheckCircle className="h-4 w-4 text-green-500" />;
+        return <CheckCircle className="h-4 w-4 text-green-600" />;
       case 'failed':
-        return <XCircle className="h-4 w-4 text-red-500" />;
+        return <XCircle className="h-4 w-4 text-red-600" />;
+      case 'pending':
+        return <Clock className="h-4 w-4 text-yellow-600" />;
       default:
-        return <AlertCircle className="h-4 w-4 text-gray-500" />;
+        return <AlertTriangle className="h-4 w-4 text-gray-600" />;
     }
   };
 
-  const getStatusBadge = (status: string) => {
+  const getStatusColor = (status: string) => {
     switch (status) {
-      case 'pending':
-        return <Badge variant="outline" className="text-yellow-600 border-yellow-300">Pending</Badge>;
       case 'executed':
-        return <Badge variant="outline" className="text-green-600 border-green-300">Executed</Badge>;
+        return 'bg-green-100 text-green-800';
       case 'failed':
-        return <Badge variant="outline" className="text-red-600 border-red-300">Failed</Badge>;
+        return 'bg-red-100 text-red-800';
+      case 'pending':
+        return 'bg-yellow-100 text-yellow-800';
       default:
-        return <Badge variant="outline">Unknown</Badge>;
+        return 'bg-gray-100 text-gray-800';
     }
   };
 
   if (isLoading) {
     return (
       <Card>
-        <CardHeader>
-          <CardTitle>Transformation History</CardTitle>
-          <CardDescription>Loading transformation history...</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center justify-center h-32">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+        <CardContent className="flex items-center justify-center h-64">
+          <div className="flex items-center gap-2 text-muted-foreground">
+            <Loader2 className="h-5 w-5 animate-spin" />
+            Loading transformation history...
           </div>
         </CardContent>
       </Card>
@@ -112,90 +104,102 @@ export const TransformationHistory: React.FC<TransformationHistoryProps> = ({
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <Code className="h-5 w-5" />
+          <History className="h-5 w-5" />
           Transformation History
         </CardTitle>
         <CardDescription>
-          View and manage your database transformations
+          View and manage previous database transformations
         </CardDescription>
       </CardHeader>
       <CardContent>
         {transformations.length === 0 ? (
-          <div className="text-center py-8 text-muted-foreground">
-            No transformations found. Create your first transformation above.
+          <div className="text-center py-8">
+            <History className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+            <p className="text-muted-foreground">No transformations yet</p>
+            <p className="text-sm text-muted-foreground">
+              Generate your first transformation to see it here
+            </p>
           </div>
         ) : (
-          <ScrollArea className="h-96">
-            <div className="space-y-4">
-              {transformations.map((transformation, index) => (
-                <div key={transformation.id}>
-                  <div className="flex items-start justify-between p-4 border rounded-lg">
-                    <div className="flex-1 space-y-2">
-                      <div className="flex items-center gap-2">
-                        {getStatusIcon(transformation.execution_status)}
-                        {getStatusBadge(transformation.execution_status)}
-                        <span className="text-sm text-muted-foreground flex items-center gap-1">
-                          <Calendar className="h-3 w-3" />
-                          {new Date(transformation.created_at).toLocaleString()}
-                        </span>
-                      </div>
-                      
-                      <div>
-                        <h4 className="font-medium text-sm mb-1">Request:</h4>
-                        <p className="text-sm text-muted-foreground">{transformation.user_prompt}</p>
-                      </div>
-                      
-                      <div>
-                        <h4 className="font-medium text-sm mb-1">Generated SQL:</h4>
-                        <code className="text-xs bg-muted p-2 rounded block overflow-x-auto">
-                          {transformation.generated_sql}
-                        </code>
-                      </div>
-                      
-                      {transformation.execution_result && (
-                        <div>
-                          <h4 className="font-medium text-sm mb-1">Result:</h4>
-                          <p className={`text-xs p-2 rounded ${
-                            transformation.execution_status === 'failed' 
-                              ? 'bg-red-50 text-red-700 border border-red-200' 
-                              : 'bg-green-50 text-green-700 border border-green-200'
-                          }`}>
-                            {transformation.execution_result}
-                          </p>
-                        </div>
-                      )}
-                      
-                      {transformation.affected_tables && transformation.affected_tables.length > 0 && (
-                        <div>
-                          <h4 className="font-medium text-sm mb-1">Affected Tables:</h4>
-                          <div className="flex gap-1 flex-wrap">
-                            {transformation.affected_tables.map((table: string) => (
-                              <Badge key={table} variant="secondary" className="text-xs">
-                                {table}
-                              </Badge>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                    
-                    <div className="ml-4">
-                      {transformation.execution_status === 'pending' && onExecuteTransformation && (
-                        <Button
-                          size="sm"
-                          onClick={() => handleExecute(transformation.id)}
-                          disabled={executingId === transformation.id}
-                        >
-                          {executingId === transformation.id ? 'Executing...' : 'Execute'}
-                        </Button>
-                      )}
-                    </div>
+          <div className="space-y-4">
+            {transformations.map((transformation, index) => (
+              <div key={transformation.id} className="border rounded-lg p-4">
+                <div className="flex items-start justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    {getStatusIcon(transformation.execution_status)}
+                    <Badge variant="secondary" className={getStatusColor(transformation.execution_status)}>
+                      {transformation.execution_status.toUpperCase()}
+                    </Badge>
+                    <span className="text-sm text-muted-foreground">
+                      {new Date(transformation.created_at).toLocaleString()}
+                    </span>
                   </div>
-                  {index < transformations.length - 1 && <Separator className="my-2" />}
+                  
+                  {transformation.execution_status === 'pending' && (
+                    <Button
+                      size="sm"
+                      onClick={() => handleExecute(transformation.id)}
+                      disabled={executingId === transformation.id}
+                    >
+                      {executingId === transformation.id ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Executing...
+                        </>
+                      ) : (
+                        <>
+                          <Play className="h-4 w-4 mr-2" />
+                          Execute
+                        </>
+                      )}
+                    </Button>
+                  )}
                 </div>
-              ))}
-            </div>
-          </ScrollArea>
+
+                <div className="space-y-3">
+                  <div>
+                    <h4 className="font-medium text-sm mb-1">Request:</h4>
+                    <p className="text-sm text-muted-foreground bg-muted p-2 rounded">
+                      {transformation.user_prompt}
+                    </p>
+                  </div>
+
+                  <div>
+                    <h4 className="font-medium text-sm mb-1">Generated SQL:</h4>
+                    <pre className="text-xs bg-slate-900 text-slate-100 p-2 rounded overflow-x-auto">
+                      <code>{transformation.generated_sql}</code>
+                    </pre>
+                  </div>
+
+                  {transformation.execution_result && (
+                    <div>
+                      <h4 className="font-medium text-sm mb-1">Result:</h4>
+                      <p className={`text-sm p-2 rounded ${
+                        transformation.execution_status === 'executed' 
+                          ? 'bg-green-50 text-green-800' 
+                          : 'bg-red-50 text-red-800'
+                      }`}>
+                        {transformation.execution_result}
+                      </p>
+                    </div>
+                  )}
+
+                  {transformation.affected_tables && transformation.affected_tables.length > 0 && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-muted-foreground">Affected tables:</span>
+                      {transformation.affected_tables.map((table: string) => (
+                        <Badge key={table} variant="outline" className="text-xs">
+                          {table}
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {index < transformations.length - 1 && <Separator className="mt-4" />}
+              </div>
+            ))}
+          </div>
         )}
       </CardContent>
     </Card>

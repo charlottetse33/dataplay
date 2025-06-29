@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { DiagramRenderer } from '@/components/DiagramRenderer';
 import { TransformationAgent } from '@/components/TransformationAgent';
 import { SchemaViewer } from '@/components/SchemaViewer';
+import { SampleDataViewer } from '@/components/SampleDataViewer';
 import { SchemaSelector } from '@/components/SchemaSelector';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -254,9 +255,10 @@ const Index = () => {
 
         {/* Main Content */}
         <Tabs defaultValue="diagram" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-3">
+          <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="diagram">ER Diagram</TabsTrigger>
             <TabsTrigger value="schema">Schema Details</TabsTrigger>
+            <TabsTrigger value="data">Sample Data</TabsTrigger>
             <TabsTrigger value="transform">AI Transformations</TabsTrigger>
           </TabsList>
 
@@ -287,6 +289,30 @@ const Index = () => {
                   ) : (
                     <div className="text-center">
                       <p className="text-muted-foreground mb-4">No schema data available.</p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+          </TabsContent>
+
+          <TabsContent value="data" className="space-y-6">
+            {currentSchemaData ? (
+              <SampleDataViewer 
+                schema={currentSchemaData}
+                connectionId={currentConnection?.id || ''}
+              />
+            ) : (
+              <Card>
+                <CardContent className="flex items-center justify-center h-64">
+                  {isIntrospecting ? (
+                    <div className="flex items-center gap-2 text-muted-foreground">
+                      <Loader2 className="h-5 w-5 animate-spin" />
+                      Loading sample data...
+                    </div>
+                  ) : (
+                    <div className="text-center">
+                      <p className="text-muted-foreground mb-4">No sample data available.</p>
                     </div>
                   )}
                 </CardContent>
