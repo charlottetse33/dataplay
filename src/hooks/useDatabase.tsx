@@ -278,10 +278,8 @@ export const useDatabase = () => {
       
       let schemaContext = "No schema information available";
       let databaseType = "postgresql";
-      let currentSchemaData = null;
       
       if (snapshots.length > 0) {
-        currentSchemaData = snapshots[0];
         const tables = snapshots[0].tables;
         schemaContext = tables.map((table: any) => {
           const columns = table.columns.map((col: any) => 
@@ -304,18 +302,7 @@ ${schemaContext}
 
 Database type: ${databaseType}
 
-CRITICAL VALIDATION RULES:
-1. ONLY reference tables and columns that exist in the current schema above
-2. DO NOT add columns that already exist
-3. DO NOT drop columns that don't exist
-4. DO NOT create tables that already exist
-5. Carefully check the current schema before generating any SQL
-
-EXAMPLES OF WHAT TO AVOID:
-- If 'phone_number' already exists in 'users' table, DO NOT generate "ALTER TABLE users ADD COLUMN phone_number"
-- If 'description' doesn't exist in 'products' table, DO NOT generate "ALTER TABLE products DROP COLUMN description"
-
-Generate ONLY valid SQL that respects the current schema state. If the requested operation cannot be performed (e.g., adding an existing column), explain why in the explanation field and provide an alternative suggestion.
+Generate the SQL code as requested, even if it might conflict with the current schema. The validation will happen during execution.
 
 Provide the SQL code, explanation, affected tables, and risk level.`,
         response_json_schema: {
@@ -331,33 +318,7 @@ Provide the SQL code, explanation, affected tables, and risk level.`,
         }
       });
 
-      // CRITICAL: Validate the generated SQL against the current schema BEFORE creating the transformation
-      if (currentSchemaData) {
-        const validationErrors = validateSqlOperation(response.sql_code, currentSchemaData);
-        if (validationErrors.length > 0) {
-          console.warn('SQL validation failed:', validationErrors.join(', '));
-          
-          // Create a failed transformation record
-          const transformation = await Transformation.create({
-            connection_id: connectionId,
-            user_prompt: prompt,
-            generated_sql: response.sql_code,
-            execution_status: 'failed',
-            execution_result: `SQL validation failed: ${validationErrors.join(', ')}. Please modify your request to work with the current schema.`,
-            affected_tables: response.affected_tables || [],
-          });
-
-          // Return the failed transformation
-          return {
-            ...transformation,
-            explanation: `Cannot execute this transformation: ${validationErrors.join(', ')}. Please check the current schema and modify your request.`,
-            risk_level: 'high',
-            validation_errors: validationErrors,
-            is_validation_failed: true
-          };
-        }
-      }
-
+      // Always create the transformation as 'pending' - validation happens during execution
       const transformation = await Transformation.create({
         connection_id: connectionId,
         user_prompt: prompt,
@@ -380,13 +341,44 @@ Provide the SQL code, explanation, affected tables, and risk level.`,
       });
       throw error;
     }
-  }, [toast, currentConnection, validateSqlOperation]);
+  }, [toast, currentConnection]);
 
   const executeTransformation = useCallback(async (transformationId: string) => {
     try {
       const transformation = await Transformation.get(transformationId);
       if (!transformation) {
         throw new Error("Transformation not found");
+      }
+
+      // Get current schema for validation
+      const snapshots = await SchemaSnapshot.filter(
+        { connection_id: transformation.connection_id }, 
+        '-snapshot_date', 
+        1
+      );
+      
+      if (snapshots.length === 0) {
+        throw new Error("No schema snapshot found for validation");
+      }
+
+      const currentSchemaData = snapshots[0];
+
+      // VALIDATE SQL DURING EXECUTION
+      const validationErrors = validateSqlOperation(transformation.generated_sql, currentSchemaData);
+      if (validationErrors.length > 0) {
+        // Update transformation to failed status
+        await Transformation.update(transformationId, {
+          execution_status: 'failed',
+          execution_result: `SQL validation failed: ${validationErrors.join(', ')}. The transformation cannot be executed because it conflicts with the current schema.`,
+        });
+
+        toast({
+          title: "Execution Failed",
+          description: `SQL validation failed: ${validationErrors.join(', ')}`,
+          variant: "destructive",
+        });
+        
+        throw new Error(`SQL validation failed: ${validationErrors.join(', ')}`);
       }
 
       // Simulate SQL execution delay
@@ -424,7 +416,7 @@ Provide the SQL code, explanation, affected tables, and risk level.`,
       });
       throw error;
     }
-  }, [applySchemaChanges, toast]);
+  }, [applySchemaChanges, toast, validateSqlOperation]);
 
   return {
     currentConnection,
