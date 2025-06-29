@@ -136,10 +136,10 @@ const Index = () => {
         <div className="max-w-6xl mx-auto">
           <div className="text-center mb-8">
             <h1 className="text-4xl font-bold text-gray-900 mb-4">
-              AI Database Agent Demo
+              Dataplay
             </h1>
             <p className="text-xl text-gray-600 max-w-2xl mx-auto">
-              Explore AI database transformations with sample schemas. Generate ER diagrams and test intelligent SQL transformations.
+              Transform database schemas using natural language. Generate ER diagrams and test intelligent SQL transformations with AI.
             </p>
           </div>
           
@@ -193,7 +193,7 @@ const Index = () => {
         {/* Header */}
         <div className="flex items-center justify-between mb-8">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">Database Dashboard</h1>
+            <h1 className="text-3xl font-bold text-gray-900">Dataplay Dashboard</h1>
             <div className="flex items-center gap-2 mt-2">
               <Badge variant="secondary" className="flex items-center gap-1">
                 <Database className="h-3 w-3" />
