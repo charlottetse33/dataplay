@@ -298,6 +298,7 @@ const Index = () => {
             {currentConnection ? (
               <TransformationAgent
                 connectionId={currentConnection.id}
+                currentSchema={currentSchemaData}
                 onTransformationComplete={handleTransformationComplete}
               />
             ) : (

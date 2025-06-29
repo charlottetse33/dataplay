@@ -7,16 +7,19 @@ import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useDatabase } from '@/hooks/useDatabase';
 import { TransformationHistory } from './TransformationHistory';
+import { TransformationShortcuts } from './TransformationShortcuts';
 import { Zap, Code, AlertTriangle, CheckCircle, Clock, Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 interface TransformationAgentProps {
   connectionId: string;
+  currentSchema?: any;
   onTransformationComplete?: () => void;
 }
 
 export const TransformationAgent: React.FC<TransformationAgentProps> = ({
   connectionId,
+  currentSchema,
   onTransformationComplete
 }) => {
   const [prompt, setPrompt] = useState('');
@@ -79,6 +82,10 @@ export const TransformationAgent: React.FC<TransformationAgentProps> = ({
     } finally {
       setIsExecuting(false);
     }
+  };
+
+  const handleShortcutSelect = (shortcutPrompt: string) => {
+    setPrompt(shortcutPrompt);
   };
 
   const getRiskColor = (riskLevel: string) => {
@@ -232,6 +239,11 @@ export const TransformationAgent: React.FC<TransformationAgentProps> = ({
               </CardContent>
             </Card>
           )}
+
+          <TransformationShortcuts 
+            onShortcutSelect={handleShortcutSelect}
+            currentSchema={currentSchema}
+          />
         </TabsContent>
 
         <TabsContent value="history">
