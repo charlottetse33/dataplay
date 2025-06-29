@@ -177,23 +177,29 @@ export const useDatabase = () => {
           }
         }
       } else if (sqlLower.includes('create table')) {
-        // Handle CREATE TABLE
+        // Handle CREATE TABLE - Enhanced to support more complex table creation
         const createTableMatch = sqlCode.match(/create table\s+(\w+)\s*\((.*?)\)/is);
         if (createTableMatch) {
           const [, tableName, columnsStr] = createTableMatch;
           const columns = [];
           
-          // Parse columns (simplified parsing)
+          // Parse columns (enhanced parsing for better SQL support)
           const columnDefs = columnsStr.split(',').map(col => col.trim());
           for (const colDef of columnDefs) {
             const parts = colDef.trim().split(/\s+/);
             if (parts.length >= 2) {
+              const columnName = parts[0];
+              const dataType = parts[1].toLowerCase();
+              const isPrimaryKey = colDef.toLowerCase().includes('primary key');
+              const isNotNull = colDef.toLowerCase().includes('not null');
+              const isForeignKey = colDef.toLowerCase().includes('references');
+              
               columns.push({
-                name: parts[0],
-                data_type: parts[1].toLowerCase(),
-                is_nullable: !colDef.toLowerCase().includes('not null'),
-                is_primary_key: colDef.toLowerCase().includes('primary key'),
-                is_foreign_key: false
+                name: columnName,
+                data_type: dataType,
+                is_nullable: !isNotNull && !isPrimaryKey,
+                is_primary_key: isPrimaryKey,
+                is_foreign_key: isForeignKey
               });
             }
           }
@@ -302,7 +308,14 @@ ${schemaContext}
 
 Database type: ${databaseType}
 
-Generate the SQL code as requested, even if it might conflict with the current schema. The validation will happen during execution.
+IMPORTANT INSTRUCTIONS:
+1. When creating new tables that should contain data from existing tables, use proper JOIN statements to populate the new table with data from existing tables.
+2. For example, if creating an "order_items" table, use INSERT INTO with SELECT and JOIN to populate it with data from orders and products tables.
+3. Always include proper foreign key constraints when creating new tables.
+4. Use realistic column names and data types appropriate for the database type.
+5. If the request involves creating tables that should be populated from existing data, generate both the CREATE TABLE statement AND the INSERT INTO ... SELECT statement with appropriate JOINs.
+
+Generate the SQL code as requested, including proper table creation and data population from existing tables when applicable.
 
 Provide the SQL code, explanation, affected tables, and risk level.`,
         response_json_schema: {
