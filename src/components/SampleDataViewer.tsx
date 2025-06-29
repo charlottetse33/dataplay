@@ -31,7 +31,15 @@ export const SampleDataViewer: React.FC<SampleDataViewerProps> = ({
     return originalSchema.tables.some(table => table.name === tableName);
   };
 
-  // Generate realistic sample data based on table schema (only for original tables)
+  // Determine if a column is from the original schema or AI-generated
+  const isOriginalColumn = (tableName: string, columnName: string) => {
+    if (!originalSchema) return true; // If no original schema provided, treat all as original
+    const originalTable = originalSchema.tables.find(table => table.name === tableName);
+    if (!originalTable) return false; // Table doesn't exist in original schema
+    return originalTable.columns.some((col: any) => col.name === columnName);
+  };
+
+  // Generate realistic sample data based on table schema (only for original tables and columns)
   const generateSampleData = (table: any) => {
     // Don't generate mock data for AI-generated tables
     if (!isOriginalTable(table.name)) {
@@ -45,6 +53,12 @@ export const SampleDataViewer: React.FC<SampleDataViewerProps> = ({
       const row: any = {};
       
       table.columns.forEach((column: any) => {
+        // Only generate data for original columns
+        if (!isOriginalColumn(table.name, column.name)) {
+          row[column.name] = null; // AI-generated columns show as NULL
+          return;
+        }
+
         const columnName = column.name.toLowerCase();
         const dataType = column.data_type.toLowerCase();
         
@@ -207,9 +221,16 @@ export const SampleDataViewer: React.FC<SampleDataViewerProps> = ({
     setIsLoading(false);
   };
 
-  const formatCellValue = (value: any, column: any) => {
+  const formatCellValue = (value: any, column: any, tableName: string) => {
+    // Check if this is an AI-generated column
+    const isAIColumn = !isOriginalColumn(tableName, column.name);
+    
     if (value === null || value === undefined) {
-      return <span className="text-gray-400 italic">NULL</span>;
+      return (
+        <span className={`italic ${isAIColumn ? 'text-orange-500' : 'text-gray-400'}`}>
+          {isAIColumn ? 'AI COLUMN' : 'NULL'}
+        </span>
+      );
     }
     
     if (typeof value === 'boolean') {
@@ -381,24 +402,33 @@ export const SampleDataViewer: React.FC<SampleDataViewerProps> = ({
                         <Table>
                           <TableHeader>
                             <TableRow className="bg-muted/50">
-                              {table.columns.map((column: any) => (
-                                <TableHead key={column.name} className="font-semibold">
-                                  <div className="flex flex-col">
-                                    <span>{column.name}</span>
-                                    <div className="flex items-center gap-1 mt-1">
-                                      <Badge variant="outline" className="text-xs">
-                                        {column.data_type}
-                                      </Badge>
-                                      {column.is_primary_key && (
-                                        <Badge variant="default" className="text-xs">PK</Badge>
-                                      )}
-                                      {column.is_foreign_key && (
-                                        <Badge variant="secondary" className="text-xs">FK</Badge>
-                                      )}
+                              {table.columns.map((column: any) => {
+                                const isAIColumn = !isOriginalColumn(table.name, column.name);
+                                return (
+                                  <TableHead key={column.name} className="font-semibold">
+                                    <div className="flex flex-col">
+                                      <span className={isAIColumn ? 'text-orange-600' : ''}>
+                                        {column.name}
+                                        {isAIColumn && <span className="text-xs ml-1">(AI)</span>}
+                                      </span>
+                                      <div className="flex items-center gap-1 mt-1">
+                                        <Badge variant="outline" className="text-xs">
+                                          {column.data_type}
+                                        </Badge>
+                                        {column.is_primary_key && (
+                                          <Badge variant="default" className="text-xs">PK</Badge>
+                                        )}
+                                        {column.is_foreign_key && (
+                                          <Badge variant="secondary" className="text-xs">FK</Badge>
+                                        )}
+                                        {isAIColumn && (
+                                          <Badge variant="outline" className="text-xs bg-orange-100 text-orange-800">AI</Badge>
+                                        )}
+                                      </div>
                                     </div>
-                                  </div>
-                                </TableHead>
-                              ))}
+                                  </TableHead>
+                                );
+                              })}
                             </TableRow>
                           </TableHeader>
                           <TableBody>
@@ -406,7 +436,7 @@ export const SampleDataViewer: React.FC<SampleDataViewerProps> = ({
                               <TableRow key={rowIndex}>
                                 {table.columns.map((column: any) => (
                                   <TableCell key={column.name} className="max-w-xs">
-                                    {formatCellValue(row[column.name], column)}
+                                    {formatCellValue(row[column.name], column, table.name)}
                                   </TableCell>
                                 ))}
                               </TableRow>
@@ -425,6 +455,11 @@ export const SampleDataViewer: React.FC<SampleDataViewerProps> = ({
                         <>
                           💡 This is sample data generated for demonstration purposes. 
                           In a real application, this would show actual data from your database.
+                          {table.columns.some((col: any) => !isOriginalColumn(table.name, col.name)) && (
+                            <span className="block mt-1 text-orange-600">
+                              🔶 Orange columns were added by AI transformation and show as "AI COLUMN".
+                            </span>
+                          )}
                         </>
                       )}
                     </div>
