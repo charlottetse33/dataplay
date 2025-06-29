@@ -378,7 +378,8 @@ Provide the SQL code, explanation, affected tables, and risk level.`,
           variant: "destructive",
         });
         
-        throw new Error(`SQL validation failed: ${validationErrors.join(', ')}`);
+        // Return false to indicate failure - DO NOT refresh schema
+        return false;
       }
 
       // Simulate SQL execution delay
@@ -402,6 +403,7 @@ Provide the SQL code, explanation, affected tables, and risk level.`,
         description: `SQL transformation completed. ${changeDescription}`,
       });
 
+      // Return true to indicate success - schema should be refreshed
       return true;
     } catch (error) {
       await Transformation.update(transformationId, {
@@ -414,7 +416,9 @@ Provide the SQL code, explanation, affected tables, and risk level.`,
         description: error instanceof Error ? error.message : "Failed to execute SQL transformation.",
         variant: "destructive",
       });
-      throw error;
+      
+      // Return false to indicate failure - DO NOT refresh schema
+      return false;
     }
   }, [applySchemaChanges, toast, validateSqlOperation]);
 

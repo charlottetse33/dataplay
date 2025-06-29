@@ -87,8 +87,8 @@ const Index = () => {
   };
 
   const handleTransformationComplete = async () => {
-    console.log('Transformation completed, fetching latest snapshot...');
-    // Fetch the latest schema snapshot after transformation
+    console.log('Transformation completed successfully, fetching latest snapshot...');
+    // Only fetch latest schema snapshot after SUCCESSFUL transformation
     await fetchLatestSnapshot();
   };
 
