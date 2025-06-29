@@ -59,6 +59,130 @@ export const useDatabase = () => {
     }
   }, [toast]);
 
+  const applySchemaChanges = useCallback(async (sqlCode: string, connectionId: string) => {
+    try {
+      // Get the current schema
+      const snapshots = await SchemaSnapshot.filter(
+        { connection_id: connectionId }, 
+        '-snapshot_date', 
+        1
+      );
+      
+      if (snapshots.length === 0) {
+        throw new Error("No schema snapshot found");
+      }
+
+      let updatedSchema = JSON.parse(JSON.stringify(snapshots[0])); // Deep clone
+      let changeDescription = "";
+
+      // Parse SQL and apply changes to mock schema
+      const sqlLower = sqlCode.toLowerCase();
+      
+      if (sqlLower.includes('alter table') && sqlLower.includes('add column')) {
+        // Handle ADD COLUMN
+        const addColumnMatch = sqlCode.match(/alter table\s+(\w+)\s+add column\s+(\w+)\s+(\w+)/i);
+        if (addColumnMatch) {
+          const [, tableName, columnName, dataType] = addColumnMatch;
+          const table = updatedSchema.tables.find((t: any) => t.name.toLowerCase() === tableName.toLowerCase());
+          if (table) {
+            table.columns.push({
+              name: columnName,
+              data_type: dataType.toLowerCase(),
+              is_nullable: true,
+              is_primary_key: false,
+              is_foreign_key: false
+            });
+            changeDescription = `Added column '${columnName}' to table '${tableName}'`;
+          }
+        }
+      } else if (sqlLower.includes('create table')) {
+        // Handle CREATE TABLE
+        const createTableMatch = sqlCode.match(/create table\s+(\w+)\s*\((.*?)\)/is);
+        if (createTableMatch) {
+          const [, tableName, columnsStr] = createTableMatch;
+          const columns = [];
+          
+          // Parse columns (simplified parsing)
+          const columnDefs = columnsStr.split(',').map(col => col.trim());
+          for (const colDef of columnDefs) {
+            const parts = colDef.trim().split(/\s+/);
+            if (parts.length >= 2) {
+              columns.push({
+                name: parts[0],
+                data_type: parts[1].toLowerCase(),
+                is_nullable: !colDef.toLowerCase().includes('not null'),
+                is_primary_key: colDef.toLowerCase().includes('primary key'),
+                is_foreign_key: false
+              });
+            }
+          }
+          
+          updatedSchema.tables.push({
+            name: tableName,
+            columns: columns
+          });
+          changeDescription = `Created new table '${tableName}' with ${columns.length} columns`;
+        }
+      } else if (sqlLower.includes('create index')) {
+        // Handle CREATE INDEX
+        const indexMatch = sqlCode.match(/create index\s+(\w+)\s+on\s+(\w+)\s*\((\w+)\)/i);
+        if (indexMatch) {
+          const [, indexName, tableName, columnName] = indexMatch;
+          changeDescription = `Created index '${indexName}' on ${tableName}.${columnName}`;
+        }
+      } else if (sqlLower.includes('alter table') && sqlLower.includes('rename column')) {
+        // Handle RENAME COLUMN
+        const renameMatch = sqlCode.match(/alter table\s+(\w+)\s+rename column\s+(\w+)\s+to\s+(\w+)/i);
+        if (renameMatch) {
+          const [, tableName, oldName, newName] = renameMatch;
+          const table = updatedSchema.tables.find((t: any) => t.name.toLowerCase() === tableName.toLowerCase());
+          if (table) {
+            const column = table.columns.find((c: any) => c.name.toLowerCase() === oldName.toLowerCase());
+            if (column) {
+              column.name = newName;
+              changeDescription = `Renamed column '${oldName}' to '${newName}' in table '${tableName}'`;
+            }
+          }
+        }
+      } else if (sqlLower.includes('alter table') && sqlLower.includes('drop column')) {
+        // Handle DROP COLUMN
+        const dropMatch = sqlCode.match(/alter table\s+(\w+)\s+drop column\s+(\w+)/i);
+        if (dropMatch) {
+          const [, tableName, columnName] = dropMatch;
+          const table = updatedSchema.tables.find((t: any) => t.name.toLowerCase() === tableName.toLowerCase());
+          if (table) {
+            table.columns = table.columns.filter((c: any) => c.name.toLowerCase() !== columnName.toLowerCase());
+            changeDescription = `Dropped column '${columnName}' from table '${tableName}'`;
+          }
+        }
+      }
+
+      // Generate new ER diagram with updated schema
+      const newMermaidDiagram = generateERDiagram(updatedSchema.tables, updatedSchema.relationships);
+      
+      // Create new snapshot with updated schema
+      await SchemaSnapshot.create({
+        connection_id: connectionId,
+        schema_name: updatedSchema.schema_name,
+        tables: updatedSchema.tables,
+        relationships: updatedSchema.relationships,
+        mermaid_diagram: newMermaidDiagram,
+        snapshot_date: new Date().toISOString(),
+      });
+
+      // Update local state
+      setSchema({
+        tables: updatedSchema.tables,
+        relationships: updatedSchema.relationships
+      });
+
+      return changeDescription || "Schema updated successfully";
+    } catch (error) {
+      console.error('Failed to apply schema changes:', error);
+      throw error;
+    }
+  }, []);
+
   const generateTransformation = useCallback(async (prompt: string, connectionId: string) => {
     try {
       const snapshots = await SchemaSnapshot.filter(
@@ -140,16 +264,22 @@ export const useDatabase = () => {
       // Simulate SQL execution delay
       await new Promise(resolve => setTimeout(resolve, 2000));
 
-      // Mock successful execution
+      // Apply the schema changes to mock data
+      const changeDescription = await applySchemaChanges(
+        transformation.generated_sql, 
+        transformation.connection_id
+      );
+
+      // Update transformation status
       await Transformation.update(transformationId, {
         execution_status: 'executed',
-        execution_result: 'Demo transformation completed successfully. In a real environment, this would execute the SQL against your database.',
+        execution_result: `Demo transformation completed successfully. ${changeDescription}. The schema has been updated and the ER diagram regenerated.`,
         execution_date: new Date().toISOString(),
       });
 
       toast({
         title: "Transformation Executed (Demo)",
-        description: "SQL transformation has been simulated successfully.",
+        description: `SQL transformation completed. ${changeDescription}`,
       });
 
       return true;
@@ -166,7 +296,7 @@ export const useDatabase = () => {
       });
       throw error;
     }
-  }, [toast]);
+  }, [applySchemaChanges, toast]);
 
   return {
     currentConnection,

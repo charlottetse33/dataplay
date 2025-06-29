@@ -15,8 +15,9 @@ interface ConfirmationDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   title: string;
-  description: string;
-  confirmText: string;
+  description: React.ReactNode;
+  confirmText?: string;
+  cancelText?: string;
   onConfirm: () => void;
   isLoading?: boolean;
   variant?: 'default' | 'destructive';
@@ -27,20 +28,25 @@ export const ConfirmationDialog: React.FC<ConfirmationDialogProps> = ({
   onOpenChange,
   title,
   description,
-  confirmText,
+  confirmText = 'Confirm',
+  cancelText = 'Cancel',
   onConfirm,
   isLoading = false,
   variant = 'default'
 }) => {
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
-      <AlertDialogContent>
+      <AlertDialogContent className="max-w-2xl">
         <AlertDialogHeader>
           <AlertDialogTitle>{title}</AlertDialogTitle>
-          <AlertDialogDescription>{description}</AlertDialogDescription>
+          <AlertDialogDescription asChild>
+            <div>{description}</div>
+          </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel disabled={isLoading}>Cancel</AlertDialogCancel>
+          <AlertDialogCancel disabled={isLoading}>
+            {cancelText}
+          </AlertDialogCancel>
           <AlertDialogAction
             onClick={onConfirm}
             disabled={isLoading}
@@ -49,7 +55,7 @@ export const ConfirmationDialog: React.FC<ConfirmationDialogProps> = ({
             {isLoading ? (
               <>
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Processing...
+                Executing...
               </>
             ) : (
               confirmText
