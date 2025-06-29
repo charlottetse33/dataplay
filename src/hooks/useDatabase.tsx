@@ -3,7 +3,7 @@ import { DatabaseConnection, SchemaSnapshot, Transformation } from '@/entities';
 import { invokeLLM } from '@/integrations/core';
 import { generateERDiagram } from '@/lib/mermaid';
 import { useToast } from '@/hooks/use-toast';
-import { testDatabaseConnection, introspectDatabase, executeSqlTransformation } from '@/functions';
+import { mockConnections, getSchemaForConnection } from '@/lib/mockData';
 
 interface DatabaseSchema {
   tables: any[];
@@ -20,20 +20,16 @@ export const useDatabase = () => {
   const testConnection = useCallback(async (connectionData: any) => {
     setIsConnecting(true);
     try {
-      console.log('Testing connection with data:', { ...connectionData, password: '[HIDDEN]' });
+      console.log('Testing mock connection with data:', { ...connectionData, password: '[HIDDEN]' });
       
-      const result = await testDatabaseConnection({ connectionData });
-      console.log('Connection test response:', result);
+      // Simulate connection test delay
+      await new Promise(resolve => setTimeout(resolve, 1500));
       
-      if (result.success) {
-        toast({
-          title: "Connection Successful",
-          description: `Connected to database: ${result.details?.database || connectionData.database}`,
-        });
-        return true;
-      } else {
-        throw new Error(result.error || "Connection failed");
-      }
+      toast({
+        title: "Connection Successful",
+        description: `Connected to mock database: ${connectionData.database}`,
+      });
+      return true;
     } catch (error) {
       console.error('Connection test failed:', error);
       toast({
@@ -72,57 +68,54 @@ export const useDatabase = () => {
     }
   }, [toast]);
 
-  const introspectSchema = useCallback(async (connectionId: string) => {
+  const loadMockSchema = useCallback(async (connectionId: string, mockData?: any) => {
     setIsIntrospecting(true);
     try {
-      const connection = await DatabaseConnection.get(connectionId);
-      if (!connection) {
-        throw new Error("Connection not found");
-      }
+      console.log('Loading mock schema for connection:', connectionId);
 
-      console.log('Starting introspection for connection:', connection.name);
+      let schemaData;
+      let connection;
 
-      const result = await introspectDatabase({ 
-        connectionData: {
-          host: connection.host,
-          port: connection.port,
-          database: connection.database,
-          username: connection.username,
-          password: connection.password,
-          ssl_mode: connection.ssl_mode
+      if (mockData) {
+        // Use provided mock data
+        schemaData = mockData.schema;
+        connection = mockData.connection;
+        setCurrentConnection(connection);
+      } else {
+        // Load from existing connection
+        connection = await DatabaseConnection.get(connectionId);
+        if (!connection) {
+          throw new Error("Connection not found");
         }
-      });
-
-      console.log('Introspection response:', result);
-
-      if (!result.success) {
-        throw new Error(result.error || "Failed to introspect database");
+        schemaData = getSchemaForConnection(connectionId);
       }
 
-      const { schema: dbSchema } = result;
-      const mermaidDiagram = generateERDiagram(dbSchema.tables, dbSchema.relationships);
+      // Simulate introspection delay
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+      const mermaidDiagram = generateERDiagram(schemaData.tables, schemaData.relationships);
       
       await SchemaSnapshot.create({
         connection_id: connectionId,
-        schema_name: dbSchema.schemas ? dbSchema.schemas.join(', ') : 'public',
-        tables: dbSchema.tables,
-        relationships: dbSchema.relationships,
+        schema_name: 'public',
+        tables: schemaData.tables,
+        relationships: schemaData.relationships,
         mermaid_diagram: mermaidDiagram,
         snapshot_date: new Date().toISOString(),
       });
 
-      setSchema(dbSchema);
+      setSchema(schemaData);
       toast({
-        title: "Schema Introspected",
-        description: `Found ${dbSchema.tables.length} tables and ${dbSchema.relationships.length} relationships.`,
+        title: "Schema Loaded",
+        description: `Found ${schemaData.tables.length} tables and ${schemaData.relationships.length} relationships.`,
       });
 
-      return dbSchema;
+      return schemaData;
     } catch (error) {
-      console.error('Introspection error:', error);
+      console.error('Schema loading error:', error);
       toast({
-        title: "Introspection Failed",
-        description: error instanceof Error ? error.message : "Failed to analyze database schema.",
+        title: "Schema Load Failed",
+        description: error instanceof Error ? error.message : "Failed to load database schema.",
         variant: "destructive",
       });
       throw error;
@@ -130,6 +123,10 @@ export const useDatabase = () => {
       setIsIntrospecting(false);
     }
   }, [toast]);
+
+  const introspectSchema = useCallback(async (connectionId: string) => {
+    return loadMockSchema(connectionId);
+  }, [loadMockSchema]);
 
   const generateTransformation = useCallback(async (prompt: string, connectionId: string) => {
     try {
@@ -140,6 +137,8 @@ export const useDatabase = () => {
       );
       
       let schemaContext = "No schema information available";
+      let databaseType = "postgresql";
+      
       if (snapshots.length > 0) {
         const tables = snapshots[0].tables;
         schemaContext = tables.map((table: any) => {
@@ -150,13 +149,22 @@ export const useDatabase = () => {
         }).join('\n');
       }
 
+      // Get database type from current connection
+      if (currentConnection) {
+        databaseType = currentConnection.database_type;
+      }
+
       const response = await invokeLLM({
-        prompt: `You are a PostgreSQL expert. Generate SQL transformation code for the following request: "${prompt}". 
+        prompt: `You are a ${databaseType.toUpperCase()} expert. Generate SQL transformation code for the following request: "${prompt}". 
         
         Current schema context:
         ${schemaContext}
         
-        Provide only the SQL code needed to perform this transformation. Include ALTER TABLE, UPDATE, or other necessary statements. Be specific and safe. Make sure the SQL is valid PostgreSQL syntax.`,
+        Database type: ${databaseType}
+        
+        Provide only the SQL code needed to perform this transformation. Include ALTER TABLE, UPDATE, or other necessary statements. Be specific and safe. Make sure the SQL is valid ${databaseType} syntax.
+        
+        Also assess the risk level (low, medium, high) based on the potential impact of this transformation.`,
         response_json_schema: {
           type: "object",
           properties: {
@@ -189,7 +197,7 @@ export const useDatabase = () => {
       });
       throw error;
     }
-  }, [toast]);
+  }, [toast, currentConnection]);
 
   const executeTransformation = useCallback(async (transformationId: string) => {
     try {
@@ -198,38 +206,22 @@ export const useDatabase = () => {
         throw new Error("Transformation not found");
       }
 
-      const connection = await DatabaseConnection.get(transformation.connection_id);
-      if (!connection) {
-        throw new Error("Connection not found");
-      }
+      // Simulate SQL execution delay
+      await new Promise(resolve => setTimeout(resolve, 2000));
 
-      const result = await executeSqlTransformation({
-        connectionData: {
-          host: connection.host,
-          port: connection.port,
-          database: connection.database,
-          username: connection.username,
-          password: connection.password,
-          ssl_mode: connection.ssl_mode
-        },
-        sqlCode: transformation.generated_sql
-      });
-
-      if (!result.success) {
-        throw new Error(result.error || "Failed to execute transformation");
-      }
-
+      // Mock successful execution
       await Transformation.update(transformationId, {
         execution_status: 'executed',
-        execution_result: result.result || 'Transformation completed successfully',
+        execution_result: 'Mock transformation completed successfully. In a real environment, this would execute the SQL against your database.',
         execution_date: new Date().toISOString(),
       });
 
       toast({
-        title: "Transformation Executed",
-        description: "SQL transformation has been applied successfully.",
+        title: "Transformation Executed (Mock)",
+        description: "SQL transformation has been simulated successfully.",
       });
 
+      // Refresh schema after transformation
       if (currentConnection) {
         await introspectSchema(currentConnection.id);
       }
@@ -261,5 +253,6 @@ export const useDatabase = () => {
     generateTransformation,
     executeTransformation,
     setCurrentConnection,
+    loadMockSchema,
   };
 };

@@ -16,8 +16,7 @@ interface ConfirmationDialogProps {
   onOpenChange: (open: boolean) => void;
   title: string;
   description: string;
-  confirmText?: string;
-  cancelText?: string;
+  confirmText: string;
   onConfirm: () => void;
   isLoading?: boolean;
   variant?: 'default' | 'destructive';
@@ -28,8 +27,7 @@ export const ConfirmationDialog: React.FC<ConfirmationDialogProps> = ({
   onOpenChange,
   title,
   description,
-  confirmText = 'Confirm',
-  cancelText = 'Cancel',
+  confirmText,
   onConfirm,
   isLoading = false,
   variant = 'default'
@@ -42,11 +40,11 @@ export const ConfirmationDialog: React.FC<ConfirmationDialogProps> = ({
           <AlertDialogDescription>{description}</AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel disabled={isLoading}>{cancelText}</AlertDialogCancel>
+          <AlertDialogCancel disabled={isLoading}>Cancel</AlertDialogCancel>
           <AlertDialogAction
             onClick={onConfirm}
             disabled={isLoading}
-            className={variant === 'destructive' ? 'bg-destructive text-destructive-foreground hover:bg-destructive/90' : ''}
+            className={variant === 'destructive' ? 'bg-destructive hover:bg-destructive/90' : ''}
           >
             {isLoading ? (
               <>

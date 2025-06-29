@@ -3,23 +3,25 @@ import { DatabaseConnectionForm } from '@/components/DatabaseConnectionForm';
 import { DiagramRenderer } from '@/components/DiagramRenderer';
 import { TransformationAgent } from '@/components/TransformationAgent';
 import { SchemaViewer } from '@/components/SchemaViewer';
+import { SchemaSelector } from '@/components/SchemaSelector';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Database, Zap, GitBranch, Settings, Loader2 } from 'lucide-react';
+import { Database, Zap, GitBranch, Settings, Loader2, Play } from 'lucide-react';
 import { useDatabase } from '@/hooks/useDatabase';
 import { DatabaseConnection, SchemaSnapshot } from '@/entities';
 
 const Index = () => {
-  const [currentView, setCurrentView] = useState<'connect' | 'dashboard'>('connect');
+  const [currentView, setCurrentView] = useState<'connect' | 'demo' | 'dashboard'>('connect');
   const [latestSnapshot, setLatestSnapshot] = useState<any>(null);
   
   const { 
     currentConnection, 
     schema, 
     isIntrospecting, 
-    introspectSchema, 
+    introspectSchema,
+    loadMockSchema,
     setCurrentConnection 
   } = useDatabase();
 
@@ -63,6 +65,15 @@ const Index = () => {
     }
   };
 
+  const handleSchemaSelect = async (connectionId: string, mockData: any) => {
+    try {
+      await loadMockSchema(connectionId, mockData);
+      setCurrentView('dashboard');
+    } catch (error) {
+      console.error('Failed to load mock schema:', error);
+    }
+  };
+
   const handleSchemaRefresh = async () => {
     if (currentConnection) {
       await introspectSchema(currentConnection.id);
@@ -80,6 +91,10 @@ const Index = () => {
     setLatestSnapshot(null);
   };
 
+  const handleTryDemo = () => {
+    setCurrentView('demo');
+  };
+
   if (currentView === 'connect') {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-50 p-6">
@@ -91,6 +106,13 @@ const Index = () => {
             <p className="text-xl text-gray-600 max-w-2xl mx-auto">
               Connect to your database (PostgreSQL, MySQL, SQLite, MongoDB, SQL Server) and let AI agents generate diagrams and perform intelligent transformations.
             </p>
+          </div>
+          
+          <div className="flex justify-center gap-4 mb-8">
+            <Button onClick={handleTryDemo} size="lg" className="bg-primary hover:bg-primary/90">
+              <Play className="h-5 w-5 mr-2" />
+              Try Demo with Sample Data
+            </Button>
           </div>
           
           <DatabaseConnectionForm onConnectionSuccess={handleConnectionSuccess} />
@@ -126,6 +148,26 @@ const Index = () => {
               </CardHeader>
             </Card>
           </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (currentView === 'demo') {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-50 p-6">
+        <div className="max-w-6xl mx-auto">
+          <div className="flex items-center justify-between mb-8">
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900">Demo Mode</h1>
+              <p className="text-gray-600 mt-2">Explore AI database transformations with sample schemas</p>
+            </div>
+            <Button variant="outline" onClick={() => setCurrentView('connect')}>
+              Back to Connection
+            </Button>
+          </div>
+          
+          <SchemaSelector onSchemaSelect={handleSchemaSelect} />
         </div>
       </div>
     );
