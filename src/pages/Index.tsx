@@ -35,17 +35,18 @@ const Index = () => {
       setOriginalSchema(mockData.schema); // Store original schema for reset
       
       // Load the latest snapshot for diagram rendering
-      await refreshSnapshot();
+      await fetchLatestSnapshot();
     } catch (error) {
       console.error('Failed to load mock schema:', error);
     }
   };
 
-  const refreshSnapshot = async () => {
+  const fetchLatestSnapshot = async () => {
     if (!currentConnection) return;
     
     setIsRefreshing(true);
     try {
+      console.log('Fetching latest snapshot for connection:', currentConnection.id);
       const snapshots = await SchemaSnapshot.filter(
         { connection_id: currentConnection.id }, 
         '-snapshot_date', 
@@ -53,13 +54,24 @@ const Index = () => {
       );
       if (snapshots.length > 0) {
         setLatestSnapshot(snapshots[0]);
-        console.log('Refreshed snapshot:', snapshots[0]);
+        console.log('Fetched latest snapshot:', snapshots[0]);
+        toast({
+          title: "Schema Refreshed",
+          description: `Updated with latest schema data from ${new Date(snapshots[0].snapshot_date).toLocaleTimeString()}`,
+        });
+      } else {
+        console.log('No snapshots found for connection');
+        toast({
+          title: "No Data",
+          description: "No schema snapshots found for this connection.",
+          variant: "destructive",
+        });
       }
     } catch (error) {
-      console.error('Failed to refresh snapshot:', error);
+      console.error('Failed to fetch latest snapshot:', error);
       toast({
         title: "Refresh Failed",
-        description: "Failed to refresh schema data.",
+        description: "Failed to fetch latest schema data.",
         variant: "destructive",
       });
     } finally {
@@ -75,9 +87,9 @@ const Index = () => {
   };
 
   const handleTransformationComplete = async () => {
-    console.log('Transformation completed, refreshing data...');
-    // Refresh schema snapshot after transformation
-    await refreshSnapshot();
+    console.log('Transformation completed, fetching latest snapshot...');
+    // Fetch the latest schema snapshot after transformation
+    await fetchLatestSnapshot();
   };
 
   const handleResetDemo = async () => {
@@ -91,8 +103,8 @@ const Index = () => {
         schema: originalSchema
       });
       
-      // Refresh the snapshot
-      await refreshSnapshot();
+      // Fetch the latest snapshot
+      await fetchLatestSnapshot();
       
       toast({
         title: "Demo Reset",
@@ -110,10 +122,10 @@ const Index = () => {
     }
   };
 
-  // Auto-refresh snapshot when schema changes
+  // Auto-fetch latest snapshot when schema changes
   useEffect(() => {
     if (currentConnection && schema) {
-      refreshSnapshot();
+      fetchLatestSnapshot();
     }
   }, [schema]);
 
@@ -168,7 +180,7 @@ const Index = () => {
     );
   }
 
-  // Get the current schema data to display
+  // Get the current schema data to display - prioritize latest snapshot
   const currentSchemaData = latestSnapshot ? {
     tables: latestSnapshot.tables,
     relationships: latestSnapshot.relationships
@@ -237,7 +249,7 @@ const Index = () => {
             <DiagramRenderer
               diagram={latestSnapshot?.mermaid_diagram || ''}
               isLoading={isIntrospecting || isRefreshing}
-              onRefresh={refreshSnapshot}
+              onRefresh={fetchLatestSnapshot}
               isRefreshing={isRefreshing}
             />
           </TabsContent>
@@ -246,7 +258,7 @@ const Index = () => {
             {currentSchemaData ? (
               <SchemaViewer 
                 schema={currentSchemaData}
-                onRefresh={refreshSnapshot}
+                onRefresh={fetchLatestSnapshot}
                 isRefreshing={isRefreshing}
               />
             ) : (
