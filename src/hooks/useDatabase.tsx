@@ -20,18 +20,22 @@ export const useDatabase = () => {
   const testConnection = useCallback(async (connectionData: any) => {
     setIsConnecting(true);
     try {
+      console.log('Testing connection with data:', { ...connectionData, password: '[HIDDEN]' });
       const response = await testDatabaseConnection({ connectionData });
+      
+      console.log('Connection test response:', response);
       
       if (response.success) {
         toast({
           title: "Connection Successful",
-          description: "Successfully connected to the database.",
+          description: `Connected to database: ${response.details?.database || connectionData.database}`,
         });
         return true;
       } else {
         throw new Error(response.error || "Connection failed");
       }
     } catch (error) {
+      console.error('Connection test failed:', error);
       toast({
         title: "Connection Failed",
         description: error instanceof Error ? error.message : "Unknown error occurred",
@@ -77,6 +81,8 @@ export const useDatabase = () => {
         throw new Error("Connection not found");
       }
 
+      console.log('Starting introspection for connection:', connection.name);
+
       // Call the backend function to introspect the real database
       const response = await introspectDatabase({ 
         connectionData: {
@@ -89,6 +95,8 @@ export const useDatabase = () => {
         }
       });
 
+      console.log('Introspection response:', response);
+
       if (!response.success) {
         throw new Error(response.error || "Failed to introspect database");
       }
@@ -99,7 +107,7 @@ export const useDatabase = () => {
       // Save schema snapshot
       await SchemaSnapshot.create({
         connection_id: connectionId,
-        schema_name: 'public',
+        schema_name: dbSchema.schemas ? dbSchema.schemas.join(', ') : 'public',
         tables: dbSchema.tables,
         relationships: dbSchema.relationships,
         mermaid_diagram: mermaidDiagram,
@@ -109,7 +117,7 @@ export const useDatabase = () => {
       setSchema(dbSchema);
       toast({
         title: "Schema Introspected",
-        description: "Database schema has been analyzed successfully.",
+        description: `Found ${dbSchema.tables.length} tables and ${dbSchema.relationships.length} relationships.`,
       });
 
       return dbSchema;
