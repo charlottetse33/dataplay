@@ -11,6 +11,8 @@ import { Database, Zap, GitBranch, ArrowLeft, Loader2, RefreshCw, RotateCcw } fr
 import { useDatabase } from '@/hooks/useDatabase';
 import { SchemaSnapshot } from '@/entities';
 import { useToast } from '@/hooks/use-toast';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { WifiOff } from 'lucide-react';
 
 const Index = () => {
   const [currentView, setCurrentView] = useState<'selector' | 'dashboard'>('selector');
@@ -18,6 +20,7 @@ const Index = () => {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
   const [originalSchema, setOriginalSchema] = useState<any>(null);
+  const [snapshotError, setSnapshotError] = useState<string | null>(null);
   const { toast } = useToast();
   
   const { 
@@ -45,6 +48,8 @@ const Index = () => {
     if (!currentConnection) return;
     
     setIsRefreshing(true);
+    setSnapshotError(null);
+    
     try {
       console.log('Fetching latest snapshot for connection:', currentConnection.id);
       const snapshots = await SchemaSnapshot.filter(
@@ -61,19 +66,14 @@ const Index = () => {
         });
       } else {
         console.log('No snapshots found for connection');
-        toast({
-          title: "No Data",
-          description: "No schema snapshots found for this connection.",
-          variant: "destructive",
-        });
+        setSnapshotError('No schema snapshots found for this connection.');
       }
     } catch (error) {
-      console.error('Failed to fetch latest snapshot:', error);
-      toast({
-        title: "Refresh Failed",
-        description: "Failed to fetch latest schema data.",
-        variant: "destructive",
-      });
+      console.warn('Failed to fetch latest snapshot:', error);
+      setSnapshotError('Unable to fetch schema data. This may be due to network connectivity issues.');
+      
+      // Don't show error toast for network issues, just log it
+      console.log('Using fallback schema data from current connection');
     } finally {
       setIsRefreshing(false);
     }
@@ -180,7 +180,7 @@ const Index = () => {
     );
   }
 
-  // Get the current schema data to display - prioritize latest snapshot
+  // Get the current schema data to display - prioritize latest snapshot, fallback to schema
   const currentSchemaData = latestSnapshot ? {
     tables: latestSnapshot.tables,
     relationships: latestSnapshot.relationships
@@ -207,6 +207,11 @@ const Index = () => {
               {latestSnapshot && (
                 <Badge variant="outline" className="text-xs">
                   Last updated: {new Date(latestSnapshot.snapshot_date).toLocaleTimeString()}
+                </Badge>
+              )}
+              {snapshotError && (
+                <Badge variant="destructive" className="text-xs">
+                  Offline Mode
                 </Badge>
               )}
             </div>
@@ -236,6 +241,16 @@ const Index = () => {
             </Button>
           </div>
         </div>
+
+        {/* Network Status Alert */}
+        {snapshotError && (
+          <Alert className="mb-6">
+            <WifiOff className="h-4 w-4" />
+            <AlertDescription>
+              {snapshotError} The application is running in offline mode with cached data.
+            </AlertDescription>
+          </Alert>
+        )}
 
         {/* Main Content */}
         <Tabs defaultValue="diagram" className="space-y-6">

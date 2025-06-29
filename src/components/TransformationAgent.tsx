@@ -5,7 +5,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Loader2, Play, AlertTriangle, CheckCircle, XCircle, Zap, Code } from 'lucide-react';
+import { Loader2, Play, AlertTriangle, CheckCircle, XCircle, Zap, Code, WifiOff } from 'lucide-react';
 import { useDatabase } from '@/hooks/useDatabase';
 import { Transformation } from '@/entities';
 import { TransformationShortcuts } from './TransformationShortcuts';
@@ -25,6 +25,8 @@ export const TransformationAgent: React.FC<TransformationAgentProps> = ({
   const [currentTransformation, setCurrentTransformation] = useState<any>(null);
   const [transformationHistory, setTransformationHistory] = useState<any[]>([]);
   const [currentSchema, setCurrentSchema] = useState<any>(null);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+  const [historyError, setHistoryError] = useState<string | null>(null);
 
   const { generateTransformation, executeTransformation, schema } = useDatabase();
 
@@ -37,6 +39,11 @@ export const TransformationAgent: React.FC<TransformationAgentProps> = ({
   }, [connectionId]);
 
   const loadTransformationHistory = async () => {
+    if (!connectionId) return;
+    
+    setIsLoadingHistory(true);
+    setHistoryError(null);
+    
     try {
       const history = await Transformation.filter(
         { connection_id: connectionId },
@@ -45,7 +52,12 @@ export const TransformationAgent: React.FC<TransformationAgentProps> = ({
       );
       setTransformationHistory(history);
     } catch (error) {
-      console.error('Failed to load transformation history:', error);
+      console.warn('Failed to load transformation history:', error);
+      setHistoryError('Unable to load transformation history. This may be due to network connectivity issues.');
+      // Set empty array as fallback
+      setTransformationHistory([]);
+    } finally {
+      setIsLoadingHistory(false);
     }
   };
 
@@ -59,6 +71,15 @@ export const TransformationAgent: React.FC<TransformationAgentProps> = ({
       await loadTransformationHistory();
     } catch (error) {
       console.error('Failed to generate transformation:', error);
+      // Show user-friendly error message
+      setCurrentTransformation({
+        id: 'error',
+        generated_sql: '-- Error generating SQL',
+        explanation: 'Failed to generate SQL transformation. Please check your network connection and try again.',
+        execution_status: 'failed',
+        is_validation_failed: true,
+        risk_level: 'high'
+      });
     } finally {
       setIsGenerating(false);
     }
@@ -265,15 +286,43 @@ export const TransformationAgent: React.FC<TransformationAgentProps> = ({
         <TabsContent value="history" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>Transformation History</CardTitle>
+              <CardTitle className="flex items-center justify-between">
+                <span>Transformation History</span>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={loadTransformationHistory}
+                  disabled={isLoadingHistory}
+                >
+                  {isLoadingHistory ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    'Refresh'
+                  )}
+                </Button>
+              </CardTitle>
               <CardDescription>
                 Recent SQL transformations for this database connection
               </CardDescription>
             </CardHeader>
             <CardContent>
-              {transformationHistory.length === 0 ? (
+              {historyError && (
+                <Alert className="mb-4">
+                  <WifiOff className="h-4 w-4" />
+                  <AlertDescription>
+                    {historyError}
+                  </AlertDescription>
+                </Alert>
+              )}
+              
+              {isLoadingHistory ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-6 w-6 animate-spin mr-2" />
+                  <span className="text-muted-foreground">Loading transformation history...</span>
+                </div>
+              ) : transformationHistory.length === 0 ? (
                 <p className="text-center text-gray-500 py-8">
-                  No transformations yet. Generate your first SQL transformation!
+                  {historyError ? 'Unable to load transformation history.' : 'No transformations yet. Generate your first SQL transformation!'}
                 </p>
               ) : (
                 <div className="space-y-4">
