@@ -331,13 +331,13 @@ Provide the SQL code, explanation, affected tables, and risk level.`,
         }
       });
 
-      // Additional validation before creating the transformation
+      // CRITICAL: Validate the generated SQL against the current schema BEFORE creating the transformation
       if (currentSchemaData) {
         const validationErrors = validateSqlOperation(response.sql_code, currentSchemaData);
         if (validationErrors.length > 0) {
-          // If validation fails, create a failed transformation record WITHOUT throwing an error
           console.warn('SQL validation failed:', validationErrors.join(', '));
           
+          // Create a failed transformation record
           const transformation = await Transformation.create({
             connection_id: connectionId,
             user_prompt: prompt,
@@ -347,7 +347,7 @@ Provide the SQL code, explanation, affected tables, and risk level.`,
             affected_tables: response.affected_tables || [],
           });
 
-          // Return the failed transformation instead of throwing
+          // Return the failed transformation
           return {
             ...transformation,
             explanation: `Cannot execute this transformation: ${validationErrors.join(', ')}. Please check the current schema and modify your request.`,
