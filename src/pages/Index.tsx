@@ -301,6 +301,7 @@ const Index = () => {
               <SampleDataViewer 
                 schema={currentSchemaData}
                 connectionId={currentConnection?.id || ''}
+                originalSchema={originalSchema}
               />
             ) : (
               <Card>
