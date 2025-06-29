@@ -1,9 +1,9 @@
 import { useState, useCallback } from 'react';
-import { DatabaseConnection, SchemaSnapshot, Transformation } from '@/entities';
+import { SchemaSnapshot, Transformation } from '@/entities';
 import { invokeLLM } from '@/integrations/core';
 import { generateERDiagram } from '@/lib/mermaid';
 import { useToast } from '@/hooks/use-toast';
-import { mockConnections, getSchemaForConnection } from '@/lib/mockData';
+import { getSchemaForConnection } from '@/lib/mockData';
 
 interface DatabaseSchema {
   tables: any[];
@@ -11,87 +11,22 @@ interface DatabaseSchema {
 }
 
 export const useDatabase = () => {
-  const [isConnecting, setIsConnecting] = useState(false);
   const [currentConnection, setCurrentConnection] = useState<any>(null);
   const [schema, setSchema] = useState<DatabaseSchema | null>(null);
   const [isIntrospecting, setIsIntrospecting] = useState(false);
   const { toast } = useToast();
 
-  const testConnection = useCallback(async (connectionData: any) => {
-    setIsConnecting(true);
-    try {
-      console.log('Testing mock connection with data:', { ...connectionData, password: '[HIDDEN]' });
-      
-      // Simulate connection test delay
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      
-      toast({
-        title: "Connection Successful",
-        description: `Connected to mock database: ${connectionData.database}`,
-      });
-      return true;
-    } catch (error) {
-      console.error('Connection test failed:', error);
-      toast({
-        title: "Connection Failed",
-        description: error instanceof Error ? error.message : "Unknown error occurred",
-        variant: "destructive",
-      });
-      return false;
-    } finally {
-      setIsConnecting(false);
-    }
-  }, [toast]);
-
-  const saveConnection = useCallback(async (connectionData: any) => {
-    try {
-      const connection = await DatabaseConnection.create({
-        ...connectionData,
-        is_active: true,
-        last_connected: new Date().toISOString(),
-      });
-      
-      setCurrentConnection(connection);
-      toast({
-        title: "Connection Saved",
-        description: "Database connection has been saved successfully.",
-      });
-      
-      return connection;
-    } catch (error) {
-      toast({
-        title: "Save Failed",
-        description: "Failed to save database connection.",
-        variant: "destructive",
-      });
-      throw error;
-    }
-  }, [toast]);
-
-  const loadMockSchema = useCallback(async (connectionId: string, mockData?: any) => {
+  const loadMockSchema = useCallback(async (connectionId: string, mockData: any) => {
     setIsIntrospecting(true);
     try {
       console.log('Loading mock schema for connection:', connectionId);
 
-      let schemaData;
-      let connection;
+      const schemaData = mockData.schema;
+      const connection = mockData.connection;
+      setCurrentConnection(connection);
 
-      if (mockData) {
-        // Use provided mock data
-        schemaData = mockData.schema;
-        connection = mockData.connection;
-        setCurrentConnection(connection);
-      } else {
-        // Load from existing connection
-        connection = await DatabaseConnection.get(connectionId);
-        if (!connection) {
-          throw new Error("Connection not found");
-        }
-        schemaData = getSchemaForConnection(connectionId);
-      }
-
-      // Simulate introspection delay
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      // Simulate loading delay for better UX
+      await new Promise(resolve => setTimeout(resolve, 1500));
 
       const mermaidDiagram = generateERDiagram(schemaData.tables, schemaData.relationships);
       
@@ -107,7 +42,7 @@ export const useDatabase = () => {
       setSchema(schemaData);
       toast({
         title: "Schema Loaded",
-        description: `Found ${schemaData.tables.length} tables and ${schemaData.relationships.length} relationships.`,
+        description: `Generated ER diagram with ${schemaData.tables.length} tables and ${schemaData.relationships.length} relationships.`,
       });
 
       return schemaData;
@@ -123,10 +58,6 @@ export const useDatabase = () => {
       setIsIntrospecting(false);
     }
   }, [toast]);
-
-  const introspectSchema = useCallback(async (connectionId: string) => {
-    return loadMockSchema(connectionId);
-  }, [loadMockSchema]);
 
   const generateTransformation = useCallback(async (prompt: string, connectionId: string) => {
     try {
@@ -212,19 +143,14 @@ export const useDatabase = () => {
       // Mock successful execution
       await Transformation.update(transformationId, {
         execution_status: 'executed',
-        execution_result: 'Mock transformation completed successfully. In a real environment, this would execute the SQL against your database.',
+        execution_result: 'Demo transformation completed successfully. In a real environment, this would execute the SQL against your database.',
         execution_date: new Date().toISOString(),
       });
 
       toast({
-        title: "Transformation Executed (Mock)",
+        title: "Transformation Executed (Demo)",
         description: "SQL transformation has been simulated successfully.",
       });
-
-      // Refresh schema after transformation
-      if (currentConnection) {
-        await introspectSchema(currentConnection.id);
-      }
 
       return true;
     } catch (error) {
@@ -240,16 +166,12 @@ export const useDatabase = () => {
       });
       throw error;
     }
-  }, [currentConnection, introspectSchema, toast]);
+  }, [toast]);
 
   return {
-    isConnecting,
     currentConnection,
     schema,
     isIntrospecting,
-    testConnection,
-    saveConnection,
-    introspectSchema,
     generateTransformation,
     executeTransformation,
     setCurrentConnection,

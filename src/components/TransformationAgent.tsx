@@ -1,28 +1,48 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Wand2, AlertTriangle, CheckCircle } from 'lucide-react';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { ConfirmationDialog } from '@/components/ConfirmationDialog';
+import { Wand2, AlertTriangle, CheckCircle, Clock, Loader2 } from 'lucide-react';
 import { useDatabase } from '@/hooks/useDatabase';
-import { ConfirmationDialog } from './ConfirmationDialog';
+import { Transformation } from '@/entities';
 
 interface TransformationAgentProps {
   connectionId: string;
-  onTransformationComplete: () => void;
+  onTransformationComplete?: () => void;
 }
 
-export const TransformationAgent: React.FC<TransformationAgentProps> = ({ 
-  connectionId, 
-  onTransformationComplete 
+export const TransformationAgent: React.FC<TransformationAgentProps> = ({
+  connectionId,
+  onTransformationComplete
 }) => {
   const [prompt, setPrompt] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
-  const [generatedTransformation, setGeneratedTransformation] = useState<any>(null);
-  const [showConfirmation, setShowConfirmation] = useState(false);
+  const [currentTransformation, setCurrentTransformation] = useState<any>(null);
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [isExecuting, setIsExecuting] = useState(false);
+  const [transformationHistory, setTransformationHistory] = useState<any[]>([]);
 
   const { generateTransformation, executeTransformation } = useDatabase();
+
+  useEffect(() => {
+    loadTransformationHistory();
+  }, [connectionId]);
+
+  const loadTransformationHistory = async () => {
+    try {
+      const history = await Transformation.filter(
+        { connection_id: connectionId },
+        '-created_at',
+        10
+      );
+      setTransformationHistory(history);
+    } catch (error) {
+      console.error('Failed to load transformation history:', error);
+    }
+  };
 
   const handleGenerate = async () => {
     if (!prompt.trim()) return;
@@ -30,7 +50,8 @@ export const TransformationAgent: React.FC<TransformationAgentProps> = ({
     setIsGenerating(true);
     try {
       const transformation = await generateTransformation(prompt, connectionId);
-      setGeneratedTransformation(transformation);
+      setCurrentTransformation(transformation);
+      setShowConfirmDialog(true);
     } catch (error) {
       console.error('Failed to generate transformation:', error);
     } finally {
@@ -39,15 +60,16 @@ export const TransformationAgent: React.FC<TransformationAgentProps> = ({
   };
 
   const handleExecute = async () => {
-    if (!generatedTransformation) return;
+    if (!currentTransformation) return;
 
     setIsExecuting(true);
     try {
-      await executeTransformation(generatedTransformation.id);
-      setShowConfirmation(false);
-      setGeneratedTransformation(null);
+      await executeTransformation(currentTransformation.id);
+      setShowConfirmDialog(false);
+      setCurrentTransformation(null);
       setPrompt('');
-      onTransformationComplete();
+      await loadTransformationHistory();
+      onTransformationComplete?.();
     } catch (error) {
       console.error('Failed to execute transformation:', error);
     } finally {
@@ -57,63 +79,43 @@ export const TransformationAgent: React.FC<TransformationAgentProps> = ({
 
   const getRiskColor = (riskLevel: string) => {
     switch (riskLevel?.toLowerCase()) {
-      case 'low': return 'bg-green-100 text-green-800';
-      case 'medium': return 'bg-yellow-100 text-yellow-800';
-      case 'high': return 'bg-red-100 text-red-800';
-      default: return 'bg-gray-100 text-gray-800';
+      case 'low': return 'text-green-600 bg-green-50 border-green-200';
+      case 'medium': return 'text-yellow-600 bg-yellow-50 border-yellow-200';
+      case 'high': return 'text-red-600 bg-red-50 border-red-200';
+      default: return 'text-gray-600 bg-gray-50 border-gray-200';
     }
   };
 
-  const examplePrompts = [
-    "Split the full_name column into first_name and last_name",
-    "Add an index on the email column for better performance",
-    "Create a new status column with default value 'active'",
-    "Add a foreign key constraint between orders and products",
-    "Rename the 'total_amount' column to 'total_price'"
-  ];
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+      case 'executed': return <CheckCircle className="h-4 w-4 text-green-600" />;
+      case 'failed': return <AlertTriangle className="h-4 w-4 text-red-600" />;
+      case 'pending': return <Clock className="h-4 w-4 text-yellow-600" />;
+      default: return <Clock className="h-4 w-4 text-gray-600" />;
+    }
+  };
 
   return (
     <div className="space-y-6">
+      {/* Transformation Input */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Wand2 className="h-5 w-5 text-primary" />
-            AI Transformation Agent
+            <Wand2 className="h-5 w-5" />
+            AI SQL Transformation
           </CardTitle>
           <CardDescription>
-            Describe the database transformation you want to perform, and I'll generate the SQL code for you.
+            Describe the database changes you want to make in plain English
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Transformation Request</label>
-            <Textarea
-              placeholder="Describe what you want to change in your database schema..."
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              rows={3}
-              className="resize-none"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-muted-foreground">Example prompts:</label>
-            <div className="flex flex-wrap gap-2">
-              {examplePrompts.map((example, index) => (
-                <Button
-                  key={index}
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setPrompt(example)}
-                  className="text-xs h-auto py-1 px-2"
-                >
-                  {example}
-                </Button>
-              ))}
-            </div>
-          </div>
-
-          <Button
+          <Textarea
+            placeholder="Example: Add a 'phone' column to the users table, or Create an index on the email column for faster lookups..."
+            value={prompt}
+            onChange={(e) => setPrompt(e.target.value)}
+            rows={4}
+          />
+          <Button 
             onClick={handleGenerate}
             disabled={!prompt.trim() || isGenerating}
             className="w-full"
@@ -126,79 +128,106 @@ export const TransformationAgent: React.FC<TransformationAgentProps> = ({
             ) : (
               <>
                 <Wand2 className="h-4 w-4 mr-2" />
-                Generate Transformation
+                Generate SQL Transformation
               </>
             )}
           </Button>
         </CardContent>
       </Card>
 
-      {generatedTransformation && (
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-lg">Generated SQL Transformation</CardTitle>
-              <div className="flex items-center gap-2">
-                <Badge className={getRiskColor(generatedTransformation.risk_level)}>
-                  {generatedTransformation.risk_level || 'Unknown'} Risk
-                </Badge>
-              </div>
+      {/* Transformation History */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Transformation History</CardTitle>
+          <CardDescription>
+            Recent SQL transformations for this database
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {transformationHistory.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              No transformations yet. Generate your first SQL transformation above.
             </div>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Explanation</label>
-              <p className="text-sm text-muted-foreground bg-muted p-3 rounded-md">
-                {generatedTransformation.explanation}
-              </p>
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Generated SQL</label>
-              <pre className="bg-gray-900 text-green-400 p-4 rounded-md text-sm overflow-x-auto">
-                {generatedTransformation.generated_sql}
-              </pre>
-            </div>
-
-            {generatedTransformation.affected_tables && generatedTransformation.affected_tables.length > 0 && (
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Affected Tables</label>
-                <div className="flex flex-wrap gap-2">
-                  {generatedTransformation.affected_tables.map((table: string, index: number) => (
-                    <Badge key={index} variant="secondary">{table}</Badge>
-                  ))}
+          ) : (
+            <div className="space-y-4">
+              {transformationHistory.map((transformation) => (
+                <div key={transformation.id} className="border rounded-lg p-4">
+                  <div className="flex items-start justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      {getStatusIcon(transformation.execution_status)}
+                      <Badge variant="outline" className="capitalize">
+                        {transformation.execution_status}
+                      </Badge>
+                    </div>
+                    <span className="text-sm text-muted-foreground">
+                      {new Date(transformation.created_at).toLocaleDateString()}
+                    </span>
+                  </div>
+                  
+                  <p className="text-sm mb-3">{transformation.user_prompt}</p>
+                  
+                  <details className="text-sm">
+                    <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
+                      View Generated SQL
+                    </summary>
+                    <pre className="mt-2 p-3 bg-muted rounded text-xs overflow-x-auto">
+                      {transformation.generated_sql}
+                    </pre>
+                  </details>
+                  
+                  {transformation.execution_result && (
+                    <Alert className="mt-3">
+                      <AlertDescription className="text-sm">
+                        {transformation.execution_result}
+                      </AlertDescription>
+                    </Alert>
+                  )}
                 </div>
-              </div>
-            )}
-
-            <div className="flex gap-3 pt-4">
-              <Button
-                variant="outline"
-                onClick={() => setGeneratedTransformation(null)}
-              >
-                Cancel
-              </Button>
-              <Button
-                onClick={() => setShowConfirmation(true)}
-                className="flex items-center gap-2"
-              >
-                <CheckCircle className="h-4 w-4" />
-                Execute Transformation
-              </Button>
+              ))}
             </div>
-          </CardContent>
-        </Card>
-      )}
+          )}
+        </CardContent>
+      </Card>
 
+      {/* Confirmation Dialog */}
       <ConfirmationDialog
-        open={showConfirmation}
-        onOpenChange={setShowConfirmation}
-        title="Execute SQL Transformation"
-        description="Are you sure you want to execute this SQL transformation? This action cannot be undone."
-        confirmText="Execute"
+        open={showConfirmDialog}
+        onOpenChange={setShowConfirmDialog}
+        title="Confirm SQL Transformation"
+        description={
+          currentTransformation ? (
+            <div className="space-y-4">
+              <p><strong>Request:</strong> {currentTransformation.user_prompt}</p>
+              
+              {currentTransformation.explanation && (
+                <p><strong>Explanation:</strong> {currentTransformation.explanation}</p>
+              )}
+              
+              {currentTransformation.risk_level && (
+                <div className={`p-3 rounded-lg border ${getRiskColor(currentTransformation.risk_level)}`}>
+                  <strong>Risk Level: {currentTransformation.risk_level.toUpperCase()}</strong>
+                </div>
+              )}
+              
+              <div>
+                <strong>Generated SQL:</strong>
+                <pre className="mt-2 p-3 bg-muted rounded text-sm overflow-x-auto">
+                  {currentTransformation.generated_sql}
+                </pre>
+              </div>
+              
+              {currentTransformation.affected_tables?.length > 0 && (
+                <p>
+                  <strong>Affected Tables:</strong> {currentTransformation.affected_tables.join(', ')}
+                </p>
+              )}
+            </div>
+          ) : ''
+        }
+        confirmText="Execute Transformation"
         onConfirm={handleExecute}
         isLoading={isExecuting}
-        variant="destructive"
+        variant={currentTransformation?.risk_level === 'high' ? 'destructive' : 'default'}
       />
     </div>
   );
