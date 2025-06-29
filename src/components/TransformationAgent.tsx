@@ -67,6 +67,10 @@ export const TransformationAgent: React.FC<TransformationAgentProps> = ({
   const handleExecute = async () => {
     if (!currentTransformation) return;
 
+    if (currentTransformation.execution_status === 'failed' || currentTransformation.is_validation_failed) {
+      return;
+    }
+
     setIsExecuting(true);
     try {
       await executeTransformation(currentTransformation.id);
@@ -159,18 +163,13 @@ export const TransformationAgent: React.FC<TransformationAgentProps> = ({
             </CardContent>
           </Card>
 
-          {/* Transformation Shortcuts */}
-          <TransformationShortcuts 
-            onShortcutSelect={handleShortcutSelect}
-            currentSchema={currentSchema}
-          />
-
-          {/* Generated Transformation */}
           {currentTransformation && (
-            <Card className="border-blue-200">
+            <Card className={currentTransformation.execution_status === 'failed' || currentTransformation.is_validation_failed ? "border-red-200" : "border-blue-200"}>
               <CardHeader>
                 <CardTitle className="flex items-center justify-between">
-                  <span>Generated SQL Transformation</span>
+                  <span>
+                    {currentTransformation.execution_status === 'failed' || currentTransformation.is_validation_failed ? 'Validation Failed' : 'Generated SQL Transformation'}
+                  </span>
                   <Badge className={getRiskColor(currentTransformation.risk_level)}>
                     {currentTransformation.risk_level?.toUpperCase() || 'UNKNOWN'} RISK
                   </Badge>
@@ -186,6 +185,15 @@ export const TransformationAgent: React.FC<TransformationAgentProps> = ({
                   </pre>
                 </div>
 
+                {(currentTransformation.execution_status === 'failed' || currentTransformation.is_validation_failed) && (
+                  <Alert variant="destructive">
+                    <XCircle className="h-4 w-4" />
+                    <AlertDescription>
+                      {currentTransformation.execution_result || currentTransformation.explanation}
+                    </AlertDescription>
+                  </Alert>
+                )}
+
                 {currentTransformation.affected_tables?.length > 0 && (
                   <div>
                     <p className="text-sm font-medium mb-2">Affected Tables:</p>
@@ -197,31 +205,46 @@ export const TransformationAgent: React.FC<TransformationAgentProps> = ({
                   </div>
                 )}
 
-                <Alert>
-                  <AlertTriangle className="h-4 w-4" />
-                  <AlertDescription>
-                    This is a demo environment. The SQL will be simulated and schema changes will be applied to the mock database.
-                  </AlertDescription>
-                </Alert>
+                {!currentTransformation.execution_status || (currentTransformation.execution_status !== 'failed' && !currentTransformation.is_validation_failed) && (
+                  <Alert>
+                    <AlertTriangle className="h-4 w-4" />
+                    <AlertDescription>
+                      This is a demo environment. The SQL will be simulated and schema changes will be applied to the mock database.
+                    </AlertDescription>
+                  </Alert>
+                )}
 
                 <div className="flex gap-2">
-                  <Button 
-                    onClick={handleExecute} 
-                    disabled={isExecuting}
-                    className="flex-1"
-                  >
-                    {isExecuting ? (
-                      <>
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        Executing...
-                      </>
-                    ) : (
-                      <>
-                        <Play className="h-4 w-4 mr-2" />
-                        Execute Transformation
-                      </>
-                    )}
-                  </Button>
+                  {!currentTransformation.execution_status || (currentTransformation.execution_status !== 'failed' && !currentTransformation.is_validation_failed) ? (
+                    <Button 
+                      onClick={handleExecute} 
+                      disabled={isExecuting}
+                      className="flex-1"
+                    >
+                      {isExecuting ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Executing...
+                        </>
+                      ) : (
+                        <>
+                          <Play className="h-4 w-4 mr-2" />
+                          Execute Transformation
+                        </>
+                      )}
+                    </Button>
+                  ) : (
+                    <Button 
+                      variant="outline" 
+                      onClick={() => {
+                        setCurrentTransformation(null);
+                        setPrompt('');
+                      }}
+                      className="flex-1"
+                    >
+                      Try Different Request
+                    </Button>
+                  )}
                   <Button 
                     variant="outline" 
                     onClick={() => setCurrentTransformation(null)}
@@ -232,6 +255,11 @@ export const TransformationAgent: React.FC<TransformationAgentProps> = ({
               </CardContent>
             </Card>
           )}
+
+          <TransformationShortcuts 
+            onShortcutSelect={handleShortcutSelect}
+            currentSchema={currentSchema}
+          />
         </TabsContent>
 
         <TabsContent value="history" className="space-y-4">

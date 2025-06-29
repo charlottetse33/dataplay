@@ -278,15 +278,17 @@ export const useDatabase = () => {
       
       let schemaContext = "No schema information available";
       let databaseType = "postgresql";
+      let currentSchemaData = null;
       
       if (snapshots.length > 0) {
+        currentSchemaData = snapshots[0];
         const tables = snapshots[0].tables;
         schemaContext = tables.map((table: any) => {
           const columns = table.columns.map((col: any) => 
             `${col.name} (${col.data_type}${col.is_primary_key ? ', PK' : ''}${col.is_foreign_key ? ', FK' : ''})`
           ).join(', ');
-          return `${table.name}: ${columns}`;
-        }).join('\n');
+          return `Table: ${table.name}\nColumns: ${columns}`;
+        }).join('\n\n');
       }
 
       // Get database type from current connection
@@ -296,27 +298,65 @@ export const useDatabase = () => {
 
       const response = await invokeLLM({
         prompt: `You are a ${databaseType.toUpperCase()} expert. Generate SQL transformation code for the following request: "${prompt}". 
-        
-        Current schema context:
-        ${schemaContext}
-        
-        Database type: ${databaseType}
-        
-        IMPORTANT: Only generate SQL that is valid for the current schema. Do not reference tables or columns that don't exist.
-        
-        Provide only the SQL code needed to perform this transformation. Include ALTER TABLE, UPDATE, or other necessary statements. Be specific and safe. Make sure the SQL is valid ${databaseType} syntax.
-        
-        Also assess the risk level (low, medium, high) based on the potential impact of this transformation.`,
+
+CURRENT DATABASE SCHEMA:
+${schemaContext}
+
+Database type: ${databaseType}
+
+CRITICAL VALIDATION RULES:
+1. ONLY reference tables and columns that exist in the current schema above
+2. DO NOT add columns that already exist
+3. DO NOT drop columns that don't exist
+4. DO NOT create tables that already exist
+5. Carefully check the current schema before generating any SQL
+
+EXAMPLES OF WHAT TO AVOID:
+- If 'phone_number' already exists in 'users' table, DO NOT generate "ALTER TABLE users ADD COLUMN phone_number"
+- If 'description' doesn't exist in 'products' table, DO NOT generate "ALTER TABLE products DROP COLUMN description"
+
+Generate ONLY valid SQL that respects the current schema state. If the requested operation cannot be performed (e.g., adding an existing column), explain why in the explanation field and provide an alternative suggestion.
+
+Provide the SQL code, explanation, affected tables, and risk level.`,
         response_json_schema: {
           type: "object",
           properties: {
             sql_code: { type: "string" },
             explanation: { type: "string" },
             affected_tables: { type: "array", items: { type: "string" } },
-            risk_level: { type: "string" }
+            risk_level: { type: "string" },
+            is_valid: { type: "boolean" },
+            validation_message: { type: "string" }
           }
         }
       });
+
+      // Additional validation before creating the transformation
+      if (currentSchemaData) {
+        const validationErrors = validateSqlOperation(response.sql_code, currentSchemaData);
+        if (validationErrors.length > 0) {
+          // If validation fails, create a failed transformation record WITHOUT throwing an error
+          console.warn('SQL validation failed:', validationErrors.join(', '));
+          
+          const transformation = await Transformation.create({
+            connection_id: connectionId,
+            user_prompt: prompt,
+            generated_sql: response.sql_code,
+            execution_status: 'failed',
+            execution_result: `SQL validation failed: ${validationErrors.join(', ')}. Please modify your request to work with the current schema.`,
+            affected_tables: response.affected_tables || [],
+          });
+
+          // Return the failed transformation instead of throwing
+          return {
+            ...transformation,
+            explanation: `Cannot execute this transformation: ${validationErrors.join(', ')}. Please check the current schema and modify your request.`,
+            risk_level: 'high',
+            validation_errors: validationErrors,
+            is_validation_failed: true
+          };
+        }
+      }
 
       const transformation = await Transformation.create({
         connection_id: connectionId,
@@ -329,7 +369,8 @@ export const useDatabase = () => {
       return {
         ...transformation,
         explanation: response.explanation,
-        risk_level: response.risk_level
+        risk_level: response.risk_level,
+        is_validation_failed: false
       };
     } catch (error) {
       toast({
@@ -339,7 +380,7 @@ export const useDatabase = () => {
       });
       throw error;
     }
-  }, [toast, currentConnection]);
+  }, [toast, currentConnection, validateSqlOperation]);
 
   const executeTransformation = useCallback(async (transformationId: string) => {
     try {
