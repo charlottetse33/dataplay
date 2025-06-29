@@ -1,14 +1,6 @@
 import { superdevClient } from "@/lib/superdev/client";
 
-// Try direct function calls using the superdev client
-export const testDatabaseConnection = async (params: any) => {
-  return await superdevClient.request('POST', `/functions/test-database-connection`, params);
-};
-
-export const introspectDatabase = async (params: any) => {
-  return await superdevClient.request('POST', `/functions/introspect-database`, params);
-};
-
-export const executeSqlTransformation = async (params: any) => {
-  return await superdevClient.request('POST', `/functions/execute-sql-transformation`, params);
-};
+// Import functions using kebab-case names as they appear in the functions folder
+export const testDatabaseConnection = superdevClient.functions["test-database-connection"];
+export const introspectDatabase = superdevClient.functions["introspect-database"];
+export const executeSqlTransformation = superdevClient.functions["execute-sql-transformation"];

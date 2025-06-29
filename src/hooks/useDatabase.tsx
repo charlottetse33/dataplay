@@ -3,6 +3,7 @@ import { DatabaseConnection, SchemaSnapshot, Transformation } from '@/entities';
 import { invokeLLM } from '@/integrations/core';
 import { generateERDiagram } from '@/lib/mermaid';
 import { useToast } from '@/hooks/use-toast';
+import { testDatabaseConnection, introspectDatabase, executeSqlTransformation } from '@/functions';
 
 interface DatabaseSchema {
   tables: any[];
@@ -20,17 +21,19 @@ export const useDatabase = () => {
     setIsConnecting(true);
     try {
       console.log('Testing connection with data:', { ...connectionData, password: '[HIDDEN]' });
+      const response = await testDatabaseConnection({ connectionData });
       
-      // For now, let's simulate a successful connection test
-      // This is a temporary workaround until the backend functions are properly deployed
-      await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate network delay
+      console.log('Connection test response:', response);
       
-      toast({
-        title: "Connection Test Simulated",
-        description: `Connection parameters validated for database: ${connectionData.database}`,
-      });
-      return true;
-      
+      if (response.success) {
+        toast({
+          title: "Connection Successful",
+          description: `Connected to database: ${response.details?.database || connectionData.database}`,
+        });
+        return true;
+      } else {
+        throw new Error(response.error || "Connection failed");
+      }
     } catch (error) {
       console.error('Connection test failed:', error);
       toast({
@@ -80,64 +83,44 @@ export const useDatabase = () => {
 
       console.log('Starting introspection for connection:', connection.name);
 
-      // For now, let's create a mock schema until backend functions are working
-      const mockSchema = {
-        tables: [
-          {
-            name: 'users',
-            schema: 'public',
-            full_name: 'public.users',
-            columns: [
-              { name: 'id', data_type: 'integer', is_nullable: false, is_primary_key: true, is_foreign_key: false },
-              { name: 'email', data_type: 'varchar', is_nullable: false, is_primary_key: false, is_foreign_key: false },
-              { name: 'name', data_type: 'varchar', is_nullable: true, is_primary_key: false, is_foreign_key: false },
-              { name: 'created_at', data_type: 'timestamp', is_nullable: false, is_primary_key: false, is_foreign_key: false }
-            ]
-          },
-          {
-            name: 'posts',
-            schema: 'public',
-            full_name: 'public.posts',
-            columns: [
-              { name: 'id', data_type: 'integer', is_nullable: false, is_primary_key: true, is_foreign_key: false },
-              { name: 'title', data_type: 'varchar', is_nullable: false, is_primary_key: false, is_foreign_key: false },
-              { name: 'content', data_type: 'text', is_nullable: true, is_primary_key: false, is_foreign_key: false },
-              { name: 'user_id', data_type: 'integer', is_nullable: false, is_primary_key: false, is_foreign_key: true },
-              { name: 'created_at', data_type: 'timestamp', is_nullable: false, is_primary_key: false, is_foreign_key: false }
-            ]
-          }
-        ],
-        relationships: [
-          {
-            from_table: 'posts',
-            to_table: 'users',
-            from_column: 'user_id',
-            to_column: 'id',
-            constraint_name: 'fk_posts_user_id',
-            relationship_type: 'one-to-many'
-          }
-        ]
-      };
+      // Call the backend function to introspect the real database
+      const response = await introspectDatabase({ 
+        connectionData: {
+          host: connection.host,
+          port: connection.port,
+          database: connection.database,
+          username: connection.username,
+          password: connection.password,
+          ssl_mode: connection.ssl_mode
+        }
+      });
 
-      const mermaidDiagram = generateERDiagram(mockSchema.tables, mockSchema.relationships);
+      console.log('Introspection response:', response);
+
+      if (!response.success) {
+        throw new Error(response.error || "Failed to introspect database");
+      }
+
+      const { schema: dbSchema } = response;
+      const mermaidDiagram = generateERDiagram(dbSchema.tables, dbSchema.relationships);
       
       // Save schema snapshot
       await SchemaSnapshot.create({
         connection_id: connectionId,
-        schema_name: 'public',
-        tables: mockSchema.tables,
-        relationships: mockSchema.relationships,
+        schema_name: dbSchema.schemas ? dbSchema.schemas.join(', ') : 'public',
+        tables: dbSchema.tables,
+        relationships: dbSchema.relationships,
         mermaid_diagram: mermaidDiagram,
         snapshot_date: new Date().toISOString(),
       });
 
-      setSchema(mockSchema);
+      setSchema(dbSchema);
       toast({
-        title: "Schema Introspected (Mock Data)",
-        description: `Found ${mockSchema.tables.length} tables and ${mockSchema.relationships.length} relationships.`,
+        title: "Schema Introspected",
+        description: `Found ${dbSchema.tables.length} tables and ${dbSchema.relationships.length} relationships.`,
       });
 
-      return mockSchema;
+      return dbSchema;
     } catch (error) {
       console.error('Introspection error:', error);
       toast({
@@ -214,20 +197,50 @@ export const useDatabase = () => {
 
   const executeTransformation = useCallback(async (transformationId: string) => {
     try {
-      // For now, simulate execution until backend functions are working
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      // Get the transformation and connection data
+      const transformation = await Transformation.get(transformationId);
+      if (!transformation) {
+        throw new Error("Transformation not found");
+      }
+
+      const connection = await DatabaseConnection.get(transformation.connection_id);
+      if (!connection) {
+        throw new Error("Connection not found");
+      }
+
+      // Execute the SQL transformation on the real database
+      const response = await executeSqlTransformation({
+        connectionData: {
+          host: connection.host,
+          port: connection.port,
+          database: connection.database,
+          username: connection.username,
+          password: connection.password,
+          ssl_mode: connection.ssl_mode
+        },
+        sqlCode: transformation.generated_sql
+      });
+
+      if (!response.success) {
+        throw new Error(response.error || "Failed to execute transformation");
+      }
 
       // Update transformation status
       await Transformation.update(transformationId, {
         execution_status: 'executed',
-        execution_result: 'Transformation simulated successfully (backend functions not available)',
+        execution_result: response.result || 'Transformation completed successfully',
         execution_date: new Date().toISOString(),
       });
 
       toast({
-        title: "Transformation Simulated",
-        description: "SQL transformation simulation completed.",
+        title: "Transformation Executed",
+        description: "SQL transformation has been applied successfully.",
       });
+
+      // Re-introspect schema after transformation to get updated structure
+      if (currentConnection) {
+        await introspectSchema(currentConnection.id);
+      }
 
       return true;
     } catch (error) {
@@ -243,7 +256,7 @@ export const useDatabase = () => {
       });
       throw error;
     }
-  }, [toast]);
+  }, [currentConnection, introspectSchema, toast]);
 
   return {
     isConnecting,
