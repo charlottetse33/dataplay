@@ -1,29 +1,60 @@
 import React from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Database, Key, Link } from 'lucide-react';
+import { Database, Key, Link, RefreshCw, Loader2 } from 'lucide-react';
 
 interface SchemaViewerProps {
   schema: {
     tables: any[];
     relationships: any[];
   };
+  onRefresh?: () => void;
+  isRefreshing?: boolean;
 }
 
-export const SchemaViewer: React.FC<SchemaViewerProps> = ({ schema }) => {
+export const SchemaViewer: React.FC<SchemaViewerProps> = ({ 
+  schema, 
+  onRefresh,
+  isRefreshing = false 
+}) => {
   return (
     <div className="space-y-6">
       {/* Tables Overview */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Database className="h-5 w-5" />
-            Database Tables ({schema.tables.length})
-          </CardTitle>
-          <CardDescription>
-            Detailed view of all tables and their column definitions
-          </CardDescription>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <Database className="h-5 w-5" />
+                Database Tables ({schema.tables.length})
+              </CardTitle>
+              <CardDescription>
+                Detailed view of all tables and their column definitions
+              </CardDescription>
+            </div>
+            {onRefresh && (
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={onRefresh}
+                disabled={isRefreshing}
+              >
+                {isRefreshing ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Refreshing...
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                    Refresh
+                  </>
+                )}
+              </Button>
+            )}
+          </div>
         </CardHeader>
         <CardContent className="space-y-6">
           {schema.tables.map((table, index) => (

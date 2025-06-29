@@ -3,11 +3,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
-import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Separator } from '@/components/ui/separator';
 import { ConfirmationDialog } from '@/components/ConfirmationDialog';
-import { Wand2, AlertTriangle, CheckCircle, Clock, Loader2 } from 'lucide-react';
+import { Zap, Loader2, AlertTriangle, CheckCircle, XCircle, Code } from 'lucide-react';
 import { useDatabase } from '@/hooks/useDatabase';
 import { Transformation } from '@/entities';
+import { useToast } from '@/hooks/use-toast';
 
 interface TransformationAgentProps {
   connectionId: string;
@@ -24,8 +25,9 @@ export const TransformationAgent: React.FC<TransformationAgentProps> = ({
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [isExecuting, setIsExecuting] = useState(false);
   const [transformationHistory, setTransformationHistory] = useState<any[]>([]);
-
+  
   const { generateTransformation, executeTransformation } = useDatabase();
+  const { toast } = useToast();
 
   useEffect(() => {
     loadTransformationHistory();
@@ -69,7 +71,11 @@ export const TransformationAgent: React.FC<TransformationAgentProps> = ({
       setCurrentTransformation(null);
       setPrompt('');
       await loadTransformationHistory();
-      onTransformationComplete?.();
+      
+      // Notify parent component that transformation is complete
+      if (onTransformationComplete) {
+        onTransformationComplete();
+      }
     } catch (error) {
       console.error('Failed to execute transformation:', error);
     } finally {
@@ -77,43 +83,43 @@ export const TransformationAgent: React.FC<TransformationAgentProps> = ({
     }
   };
 
-  const getRiskColor = (riskLevel: string) => {
-    switch (riskLevel?.toLowerCase()) {
-      case 'low': return 'text-green-600 bg-green-50 border-green-200';
-      case 'medium': return 'text-yellow-600 bg-yellow-50 border-yellow-200';
-      case 'high': return 'text-red-600 bg-red-50 border-red-200';
-      default: return 'text-gray-600 bg-gray-50 border-gray-200';
+  const getRiskColor = (risk: string) => {
+    switch (risk?.toLowerCase()) {
+      case 'low': return 'bg-green-100 text-green-800';
+      case 'medium': return 'bg-yellow-100 text-yellow-800';
+      case 'high': return 'bg-red-100 text-red-800';
+      default: return 'bg-gray-100 text-gray-800';
     }
   };
 
   const getStatusIcon = (status: string) => {
     switch (status) {
       case 'executed': return <CheckCircle className="h-4 w-4 text-green-600" />;
-      case 'failed': return <AlertTriangle className="h-4 w-4 text-red-600" />;
-      case 'pending': return <Clock className="h-4 w-4 text-yellow-600" />;
-      default: return <Clock className="h-4 w-4 text-gray-600" />;
+      case 'failed': return <XCircle className="h-4 w-4 text-red-600" />;
+      case 'pending': return <Loader2 className="h-4 w-4 text-yellow-600" />;
+      default: return null;
     }
   };
 
   return (
     <div className="space-y-6">
-      {/* Transformation Input */}
+      {/* Transformation Generator */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Wand2 className="h-5 w-5" />
-            AI SQL Transformation
+            <Zap className="h-5 w-5" />
+            AI Database Transformation
           </CardTitle>
           <CardDescription>
-            Describe the database changes you want to make in plain English
+            Describe the changes you want to make to your database schema in plain English
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <Textarea
-            placeholder="Example: Add a 'phone' column to the users table, or Create an index on the email column for faster lookups..."
+            placeholder="e.g., Add a 'phone_number' column to the users table, or Create an index on the email column for faster lookups"
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
-            rows={4}
+            className="min-h-24"
           />
           <Button 
             onClick={handleGenerate}
@@ -127,8 +133,8 @@ export const TransformationAgent: React.FC<TransformationAgentProps> = ({
               </>
             ) : (
               <>
-                <Wand2 className="h-4 w-4 mr-2" />
-                Generate SQL Transformation
+                <Zap className="h-4 w-4 mr-2" />
+                Generate Transformation
               </>
             )}
           </Button>
@@ -140,47 +146,46 @@ export const TransformationAgent: React.FC<TransformationAgentProps> = ({
         <CardHeader>
           <CardTitle>Transformation History</CardTitle>
           <CardDescription>
-            Recent SQL transformations for this database
+            Recent database transformations for this connection
           </CardDescription>
         </CardHeader>
         <CardContent>
           {transformationHistory.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
-              No transformations yet. Generate your first SQL transformation above.
+              No transformations yet. Generate your first transformation above.
             </div>
           ) : (
             <div className="space-y-4">
-              {transformationHistory.map((transformation) => (
+              {transformationHistory.map((transformation, index) => (
                 <div key={transformation.id} className="border rounded-lg p-4">
                   <div className="flex items-start justify-between mb-2">
                     <div className="flex items-center gap-2">
                       {getStatusIcon(transformation.execution_status)}
-                      <Badge variant="outline" className="capitalize">
-                        {transformation.execution_status}
-                      </Badge>
+                      <span className="font-medium">
+                        {transformation.user_prompt}
+                      </span>
                     </div>
-                    <span className="text-sm text-muted-foreground">
+                    <Badge variant="outline" className="text-xs">
                       {new Date(transformation.created_at).toLocaleDateString()}
-                    </span>
+                    </Badge>
                   </div>
                   
-                  <p className="text-sm mb-3">{transformation.user_prompt}</p>
-                  
-                  <details className="text-sm">
-                    <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
-                      View Generated SQL
-                    </summary>
-                    <pre className="mt-2 p-3 bg-muted rounded text-xs overflow-x-auto">
-                      {transformation.generated_sql}
-                    </pre>
-                  </details>
+                  {transformation.generated_sql && (
+                    <div className="mt-3">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Code className="h-4 w-4" />
+                        <span className="text-sm font-medium">Generated SQL:</span>
+                      </div>
+                      <pre className="bg-gray-50 p-3 rounded text-sm overflow-x-auto">
+                        {transformation.generated_sql}
+                      </pre>
+                    </div>
+                  )}
                   
                   {transformation.execution_result && (
-                    <Alert className="mt-3">
-                      <AlertDescription className="text-sm">
-                        {transformation.execution_result}
-                      </AlertDescription>
-                    </Alert>
+                    <div className="mt-2 text-sm text-muted-foreground">
+                      <strong>Result:</strong> {transformation.execution_result}
+                    </div>
                   )}
                 </div>
               ))}
@@ -193,41 +198,55 @@ export const TransformationAgent: React.FC<TransformationAgentProps> = ({
       <ConfirmationDialog
         open={showConfirmDialog}
         onOpenChange={setShowConfirmDialog}
-        title="Confirm SQL Transformation"
+        title="Confirm Database Transformation"
         description={
           currentTransformation ? (
             <div className="space-y-4">
-              <p><strong>Request:</strong> {currentTransformation.user_prompt}</p>
-              
-              {currentTransformation.explanation && (
-                <p><strong>Explanation:</strong> {currentTransformation.explanation}</p>
-              )}
-              
-              {currentTransformation.risk_level && (
-                <div className={`p-3 rounded-lg border ${getRiskColor(currentTransformation.risk_level)}`}>
-                  <strong>Risk Level: {currentTransformation.risk_level.toUpperCase()}</strong>
-                </div>
-              )}
+              <div>
+                <p className="mb-2"><strong>Request:</strong> {currentTransformation.user_prompt}</p>
+                <p className="mb-2"><strong>Explanation:</strong> {currentTransformation.explanation}</p>
+              </div>
               
               <div>
-                <strong>Generated SQL:</strong>
-                <pre className="mt-2 p-3 bg-muted rounded text-sm overflow-x-auto">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-sm font-medium">Risk Level:</span>
+                  <Badge className={getRiskColor(currentTransformation.risk_level)}>
+                    {currentTransformation.risk_level?.toUpperCase()}
+                  </Badge>
+                </div>
+                
+                <div className="mb-2">
+                  <span className="text-sm font-medium">Affected Tables:</span>
+                  <div className="flex gap-1 mt-1">
+                    {currentTransformation.affected_tables?.map((table: string, index: number) => (
+                      <Badge key={index} variant="outline" className="text-xs">
+                        {table}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <p className="text-sm font-medium mb-2">Generated SQL:</p>
+                <pre className="bg-gray-50 p-3 rounded text-sm overflow-x-auto max-h-32">
                   {currentTransformation.generated_sql}
                 </pre>
               </div>
-              
-              {currentTransformation.affected_tables?.length > 0 && (
-                <p>
-                  <strong>Affected Tables:</strong> {currentTransformation.affected_tables.join(', ')}
-                </p>
-              )}
+
+              <div className="flex items-center gap-2 p-3 bg-yellow-50 rounded-lg">
+                <AlertTriangle className="h-4 w-4 text-yellow-600" />
+                <span className="text-sm text-yellow-800">
+                  This is a demo environment. The transformation will update the mock schema data.
+                </span>
+              </div>
             </div>
-          ) : ''
+          ) : null
         }
         confirmText="Execute Transformation"
         onConfirm={handleExecute}
         isLoading={isExecuting}
-        variant={currentTransformation?.risk_level === 'high' ? 'destructive' : 'default'}
+        variant="default"
       />
     </div>
   );

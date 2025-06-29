@@ -7,13 +7,18 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Database, Zap, GitBranch, ArrowLeft, Loader2 } from 'lucide-react';
+import { Database, Zap, GitBranch, ArrowLeft, Loader2, RefreshCw, RotateCcw } from 'lucide-react';
 import { useDatabase } from '@/hooks/useDatabase';
 import { SchemaSnapshot } from '@/entities';
+import { useToast } from '@/hooks/use-toast';
 
 const Index = () => {
   const [currentView, setCurrentView] = useState<'selector' | 'dashboard'>('selector');
   const [latestSnapshot, setLatestSnapshot] = useState<any>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
+  const [originalSchema, setOriginalSchema] = useState<any>(null);
+  const { toast } = useToast();
   
   const { 
     currentConnection, 
@@ -27,30 +32,20 @@ const Index = () => {
     try {
       const schemaData = await loadMockSchema(connectionId, mockData);
       setCurrentView('dashboard');
+      setOriginalSchema(mockData.schema); // Store original schema for reset
       
       // Load the latest snapshot for diagram rendering
-      const snapshots = await SchemaSnapshot.filter(
-        { connection_id: connectionId }, 
-        '-snapshot_date', 
-        1
-      );
-      if (snapshots.length > 0) {
-        setLatestSnapshot(snapshots[0]);
-      }
+      await refreshSnapshot();
     } catch (error) {
       console.error('Failed to load mock schema:', error);
     }
   };
 
-  const handleBackToSelector = () => {
-    setCurrentConnection(null);
-    setCurrentView('selector');
-    setLatestSnapshot(null);
-  };
-
-  const handleTransformationComplete = async () => {
-    // Refresh schema snapshot after transformation
-    if (currentConnection) {
+  const refreshSnapshot = async () => {
+    if (!currentConnection) return;
+    
+    setIsRefreshing(true);
+    try {
       const snapshots = await SchemaSnapshot.filter(
         { connection_id: currentConnection.id }, 
         '-snapshot_date', 
@@ -59,6 +54,57 @@ const Index = () => {
       if (snapshots.length > 0) {
         setLatestSnapshot(snapshots[0]);
       }
+    } catch (error) {
+      console.error('Failed to refresh snapshot:', error);
+      toast({
+        title: "Refresh Failed",
+        description: "Failed to refresh schema data.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
+  const handleBackToSelector = () => {
+    setCurrentConnection(null);
+    setCurrentView('selector');
+    setLatestSnapshot(null);
+    setOriginalSchema(null);
+  };
+
+  const handleTransformationComplete = async () => {
+    // Refresh schema snapshot after transformation
+    await refreshSnapshot();
+  };
+
+  const handleResetDemo = async () => {
+    if (!currentConnection || !originalSchema) return;
+    
+    setIsResetting(true);
+    try {
+      // Reload the original schema
+      await loadMockSchema(currentConnection.id, {
+        connection: currentConnection,
+        schema: originalSchema
+      });
+      
+      // Refresh the snapshot
+      await refreshSnapshot();
+      
+      toast({
+        title: "Demo Reset",
+        description: "Database schema has been reset to its original state.",
+      });
+    } catch (error) {
+      console.error('Failed to reset demo:', error);
+      toast({
+        title: "Reset Failed",
+        description: "Failed to reset the demo database.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsResetting(false);
     }
   };
 
@@ -135,6 +181,23 @@ const Index = () => {
           </div>
           
           <div className="flex gap-3">
+            <Button 
+              variant="outline" 
+              onClick={handleResetDemo}
+              disabled={isResetting || !originalSchema}
+            >
+              {isResetting ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Resetting...
+                </>
+              ) : (
+                <>
+                  <RotateCcw className="h-4 w-4 mr-2" />
+                  Reset Demo
+                </>
+              )}
+            </Button>
             <Button variant="outline" onClick={handleBackToSelector}>
               <ArrowLeft className="h-4 w-4 mr-2" />
               Back to Schemas
@@ -153,13 +216,22 @@ const Index = () => {
           <TabsContent value="diagram" className="space-y-6">
             <DiagramRenderer
               diagram={latestSnapshot?.mermaid_diagram || ''}
-              isLoading={isIntrospecting}
+              isLoading={isIntrospecting || isRefreshing}
+              onRefresh={refreshSnapshot}
+              isRefreshing={isRefreshing}
             />
           </TabsContent>
 
           <TabsContent value="schema" className="space-y-6">
             {schema ? (
-              <SchemaViewer schema={schema} />
+              <SchemaViewer 
+                schema={latestSnapshot ? {
+                  tables: latestSnapshot.tables,
+                  relationships: latestSnapshot.relationships
+                } : schema} 
+                onRefresh={refreshSnapshot}
+                isRefreshing={isRefreshing}
+              />
             ) : (
               <Card>
                 <CardContent className="flex items-center justify-center h-64">
