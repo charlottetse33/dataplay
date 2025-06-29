@@ -12,14 +12,6 @@ interface DatabaseConnectionFormProps {
   onConnectionSuccess: (connection: any) => void;
 }
 
-const DATABASE_TYPES = [
-  { value: 'postgresql', label: 'PostgreSQL', defaultPort: 5432 },
-  { value: 'mysql', label: 'MySQL', defaultPort: 3306 },
-  { value: 'sqlite', label: 'SQLite', defaultPort: null },
-  { value: 'mongodb', label: 'MongoDB', defaultPort: 27017 },
-  { value: 'redis', label: 'Redis', defaultPort: 6379 },
-];
-
 export const DatabaseConnectionForm: React.FC<DatabaseConnectionFormProps> = ({ onConnectionSuccess }) => {
   const [formData, setFormData] = useState({
     name: '',
@@ -29,10 +21,12 @@ export const DatabaseConnectionForm: React.FC<DatabaseConnectionFormProps> = ({ 
     database: '',
     username: '',
     password: '',
+    connection_string: '',
     ssl_mode: 'prefer',
-    connection_string: ''
+    additional_options: {}
   });
 
+  const [useConnectionString, setUseConnectionString] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
   const [testResult, setTestResult] = useState<'success' | 'error' | null>(null);
   const [errorMessage, setErrorMessage] = useState<string>('');
@@ -45,22 +39,27 @@ export const DatabaseConnectionForm: React.FC<DatabaseConnectionFormProps> = ({ 
   };
 
   const handleDatabaseTypeChange = (type: string) => {
-    const dbType = DATABASE_TYPES.find(db => db.value === type);
+    const defaultPorts: { [key: string]: number } = {
+      postgresql: 5432,
+      mysql: 3306,
+      sqlite: 0,
+      mongodb: 27017,
+      mssql: 1433
+    };
+
     setFormData(prev => ({
       ...prev,
       database_type: type,
-      port: dbType?.defaultPort || prev.port,
-      host: type === 'sqlite' ? '' : 'localhost'
+      port: defaultPorts[type] || 5432,
+      ssl_mode: type === 'sqlite' ? 'disable' : 'prefer'
     }));
-    setTestResult(null);
-    setErrorMessage('');
+    setUseConnectionString(type === 'mongodb');
   };
 
   const handleTestConnection = async () => {
     setIsTesting(true);
     setErrorMessage('');
     try {
-      console.log('Testing connection with form data:', { ...formData, password: '[HIDDEN]' });
       const success = await testConnection(formData);
       setTestResult(success ? 'success' : 'error');
       if (!success) {
@@ -84,13 +83,12 @@ export const DatabaseConnectionForm: React.FC<DatabaseConnectionFormProps> = ({ 
     }
   };
 
-  const selectedDbType = DATABASE_TYPES.find(db => db.value === formData.database_type);
-  const requiresHost = formData.database_type !== 'sqlite';
-  const supportsConnectionString = ['mongodb', 'redis'].includes(formData.database_type);
+  const isFormValid = formData.name && 
+    (useConnectionString ? formData.connection_string : 
+     (formData.database && (formData.database_type === 'sqlite' || (formData.host && formData.username))));
 
-  const isFormValid = formData.name && formData.database && 
-    (formData.database_type === 'sqlite' || formData.host) &&
-    (formData.database_type === 'sqlite' || formData.username);
+  const requiresCredentials = !['sqlite'].includes(formData.database_type);
+  const requiresHost = !['sqlite', 'mongodb'].includes(formData.database_type) || !useConnectionString;
 
   return (
     <Card className="w-full max-w-2xl mx-auto">
@@ -121,106 +119,123 @@ export const DatabaseConnectionForm: React.FC<DatabaseConnectionFormProps> = ({ 
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {DATABASE_TYPES.map(db => (
-                  <SelectItem key={db.value} value={db.value}>
-                    {db.label}
-                  </SelectItem>
-                ))}
+                <SelectItem value="postgresql">PostgreSQL</SelectItem>
+                <SelectItem value="mysql">MySQL</SelectItem>
+                <SelectItem value="sqlite">SQLite</SelectItem>
+                <SelectItem value="mongodb">MongoDB</SelectItem>
+                <SelectItem value="mssql">SQL Server</SelectItem>
               </SelectContent>
             </Select>
           </div>
         </div>
 
-        {requiresHost && (
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="host">Host</Label>
-              <Input
-                id="host"
-                placeholder="localhost"
-                value={formData.host}
-                onChange={(e) => handleInputChange('host', e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="port">Port</Label>
-              <Input
-                id="port"
-                type="number"
-                placeholder={selectedDbType?.defaultPort?.toString() || ''}
-                value={formData.port}
-                onChange={(e) => handleInputChange('port', parseInt(e.target.value) || selectedDbType?.defaultPort || 5432)}
-              />
-            </div>
-          </div>
-        )}
-
-        <div className="space-y-2">
-          <Label htmlFor="database">
-            {formData.database_type === 'sqlite' ? 'Database File Path' : 'Database Name'}
-          </Label>
-          <Input
-            id="database"
-            placeholder={formData.database_type === 'sqlite' ? '/path/to/database.db' : 'myapp_production'}
-            value={formData.database}
-            onChange={(e) => handleInputChange('database', e.target.value)}
-          />
-        </div>
-
-        {requiresHost && (
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="username">Username</Label>
-              <Input
-                id="username"
-                placeholder="username"
-                value={formData.username}
-                onChange={(e) => handleInputChange('username', e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
-              <Input
-                id="password"
-                type="password"
-                placeholder="••••••••"
-                value={formData.password}
-                onChange={(e) => handleInputChange('password', e.target.value)}
-              />
-            </div>
-          </div>
-        )}
-
-        {supportsConnectionString && (
+        {formData.database_type === 'mongodb' && (
           <div className="space-y-2">
-            <Label htmlFor="connection_string">Connection String (Optional)</Label>
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="useConnectionString"
+                checked={useConnectionString}
+                onChange={(e) => setUseConnectionString(e.target.checked)}
+              />
+              <Label htmlFor="useConnectionString">Use connection string</Label>
+            </div>
+          </div>
+        )}
+
+        {useConnectionString ? (
+          <div className="space-y-2">
+            <Label htmlFor="connection_string">Connection String</Label>
             <Textarea
               id="connection_string"
-              placeholder={`${formData.database_type}://username:password@host:port/database`}
+              placeholder="mongodb://username:password@host:port/database"
               value={formData.connection_string}
               onChange={(e) => handleInputChange('connection_string', e.target.value)}
-              rows={2}
+              rows={3}
             />
           </div>
-        )}
+        ) : (
+          <>
+            {requiresHost && (
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="host">Host</Label>
+                  <Input
+                    id="host"
+                    placeholder="localhost"
+                    value={formData.host}
+                    onChange={(e) => handleInputChange('host', e.target.value)}
+                  />
+                </div>
+                {formData.database_type !== 'sqlite' && (
+                  <div className="space-y-2">
+                    <Label htmlFor="port">Port</Label>
+                    <Input
+                      id="port"
+                      type="number"
+                      value={formData.port}
+                      onChange={(e) => handleInputChange('port', parseInt(e.target.value) || 0)}
+                    />
+                  </div>
+                )}
+              </div>
+            )}
 
-        {['postgresql', 'mysql'].includes(formData.database_type) && (
-          <div className="space-y-2">
-            <Label htmlFor="ssl_mode">SSL Mode</Label>
-            <Select value={formData.ssl_mode} onValueChange={(value) => handleInputChange('ssl_mode', value)}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="disable">Disable</SelectItem>
-                <SelectItem value="allow">Allow</SelectItem>
-                <SelectItem value="prefer">Prefer</SelectItem>
-                <SelectItem value="require">Require</SelectItem>
-                <SelectItem value="verify-ca">Verify CA</SelectItem>
-                <SelectItem value="verify-full">Verify Full</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+            <div className="space-y-2">
+              <Label htmlFor="database">
+                {formData.database_type === 'sqlite' ? 'Database File Path' : 'Database Name'}
+              </Label>
+              <Input
+                id="database"
+                placeholder={formData.database_type === 'sqlite' ? '/path/to/database.db' : 'myapp_production'}
+                value={formData.database}
+                onChange={(e) => handleInputChange('database', e.target.value)}
+              />
+            </div>
+
+            {requiresCredentials && (
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="username">Username</Label>
+                  <Input
+                    id="username"
+                    placeholder="username"
+                    value={formData.username}
+                    onChange={(e) => handleInputChange('username', e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="password">Password</Label>
+                  <Input
+                    id="password"
+                    type="password"
+                    placeholder="••••••••"
+                    value={formData.password}
+                    onChange={(e) => handleInputChange('password', e.target.value)}
+                  />
+                </div>
+              </div>
+            )}
+
+            {!['sqlite', 'mongodb'].includes(formData.database_type) && (
+              <div className="space-y-2">
+                <Label htmlFor="ssl_mode">SSL Mode</Label>
+                <Select value={formData.ssl_mode} onValueChange={(value) => handleInputChange('ssl_mode', value)}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="disable">Disable</SelectItem>
+                    <SelectItem value="allow">Allow</SelectItem>
+                    <SelectItem value="prefer">Prefer</SelectItem>
+                    <SelectItem value="require">Require</SelectItem>
+                    <SelectItem value="verify-ca">Verify CA</SelectItem>
+                    <SelectItem value="verify-full">Verify Full</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+          </>
         )}
 
         {testResult && (

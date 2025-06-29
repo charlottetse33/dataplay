@@ -86,10 +86,10 @@ const Index = () => {
         <div className="max-w-6xl mx-auto">
           <div className="text-center mb-8">
             <h1 className="text-4xl font-bold text-gray-900 mb-4">
-              Universal Database Agent
+              AI Database Agent
             </h1>
             <p className="text-xl text-gray-600 max-w-2xl mx-auto">
-              Connect to any database (PostgreSQL, MySQL, SQLite, MongoDB, Redis) and let AI agents generate diagrams and perform intelligent transformations.
+              Connect to your database (PostgreSQL, MySQL, SQLite, MongoDB, SQL Server) and let AI agents generate diagrams and perform intelligent transformations.
             </p>
           </div>
           
@@ -101,7 +101,7 @@ const Index = () => {
                 <Database className="h-8 w-8 text-primary mb-2" />
                 <CardTitle>Multi-Database Support</CardTitle>
                 <CardDescription>
-                  Connect to PostgreSQL, MySQL, SQLite, MongoDB, and Redis databases with unified interface.
+                  Connect to PostgreSQL, MySQL, SQLite, MongoDB, and SQL Server databases with full SSL support.
                 </CardDescription>
               </CardHeader>
             </Card>
@@ -109,9 +109,9 @@ const Index = () => {
             <Card>
               <CardHeader>
                 <GitBranch className="h-8 w-8 text-primary mb-2" />
-                <CardTitle>Universal Schema Analysis</CardTitle>
+                <CardTitle>Schema Visualization</CardTitle>
                 <CardDescription>
-                  Automatically analyze and visualize database schemas across different database types.
+                  Automatically generate beautiful ER diagrams from your database schema across different database types.
                 </CardDescription>
               </CardHeader>
             </Card>
@@ -119,9 +119,9 @@ const Index = () => {
             <Card>
               <CardHeader>
                 <Zap className="h-8 w-8 text-primary mb-2" />
-                <CardTitle>Smart Transformations</CardTitle>
+                <CardTitle>AI Transformations</CardTitle>
                 <CardDescription>
-                  AI-powered SQL generation that adapts to your specific database type and syntax.
+                  Describe changes in plain English and get database-specific SQL transformations with confirmation.
                 </CardDescription>
               </CardHeader>
             </Card>
@@ -147,8 +147,7 @@ const Index = () => {
                 {currentConnection?.database_type?.toUpperCase()}
               </Badge>
               <Badge variant="outline">
-                {currentConnection?.database}
-                {currentConnection?.host && `@${currentConnection.host}`}
+                {currentConnection?.database}@{currentConnection?.host || 'local'}
               </Badge>
             </div>
           </div>
@@ -203,10 +202,21 @@ const Index = () => {
 
           <TabsContent value="transform" className="space-y-6">
             {currentConnection ? (
-              <TransformationAgent
-                connectionId={currentConnection.id}
-                onTransformationComplete={handleTransformationComplete}
-              />
+              currentConnection.database_type === 'mongodb' ? (
+                <Card>
+                  <CardContent className="flex items-center justify-center h-64">
+                    <div className="text-center">
+                      <p className="text-muted-foreground mb-2">SQL transformations are not supported for MongoDB.</p>
+                      <p className="text-sm text-muted-foreground">MongoDB uses document-based operations instead of SQL.</p>
+                    </div>
+                  </CardContent>
+                </Card>
+              ) : (
+                <TransformationAgent
+                  connectionId={currentConnection.id}
+                  onTransformationComplete={handleTransformationComplete}
+                />
+              )
             ) : (
               <Card>
                 <CardContent className="flex items-center justify-center h-64">

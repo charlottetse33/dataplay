@@ -16,7 +16,7 @@
     },
     "port": {
       "type": "number",
-      "description": "Database port number"
+      "description": "Database port number (not required for SQLite)"
     },
     "database": {
       "type": "string",
@@ -28,15 +28,19 @@
     },
     "password": {
       "type": "string",
-      "description": "Encrypted database password"
-    },
-    "ssl_mode": {
-      "type": "string",
-      "description": "SSL connection mode"
+      "description": "Encrypted database password (not required for SQLite)"
     },
     "connection_string": {
       "type": "string",
-      "description": "Full connection string for databases that support it"
+      "description": "Full connection string (alternative to individual fields)"
+    },
+    "ssl_mode": {
+      "type": "string",
+      "description": "SSL connection mode (for databases that support it)"
+    },
+    "additional_options": {
+      "type": "object",
+      "description": "Additional database-specific connection options"
     },
     "is_active": {
       "type": "boolean",
